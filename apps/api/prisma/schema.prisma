@@ -1,0 +1,401 @@
+// Модель данных CRM учебного центра немецкого языка.
+// Описание сущностей: docs/02-data-model.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────── Организация ─────────────
+
+model Branch {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+  phone     String?
+  timezone  String   @default("Asia/Bishkek")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  rooms     Room[]
+  userRoles UserRole[]
+  leads     Lead[]
+  students  Student[]
+  groups    Group[]
+  payments  Payment[]
+}
+
+model Room {
+  id       String  @id @default(uuid())
+  branchId String
+  name     String
+  capacity Int     @default(10)
+  isOnline Boolean @default(false)
+
+  branch  Branch   @relation(fields: [branchId], references: [id])
+  groups  Group[]
+  lessons Lesson[]
+}
+
+// ───────────── Пользователи, роли, права ─────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String?
+  firstName    String
+  lastName     String
+  locale       String   @default("ru") // ru | ky | de | en
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  roles         UserRole[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  managedLeads  Lead[]         @relation("LeadManager")
+  tasks         Task[]         @relation("TaskAssignee")
+  leadActivities LeadActivity[]
+  student       Student?
+  parentLinks   ParentStudent[]
+  teachingGroups Group[]       @relation("GroupTeacher")
+  lessons       Lesson[]       @relation("LessonTeacher")
+}
+
+/// Роль — набор прав. Права: "<модуль>.<действие>", например "leads.read", "finance.delete_records".
+model Role {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  permissions String[]
+  createdAt   DateTime @default(now())
+
+  users UserRole[]
+}
+
+/// Роль пользователя в филиале. branchId = null — доступ ко всем филиалам.
+model UserRole {
+  id       String  @id @default(uuid())
+  userId   String
+  roleId   String
+  branchId String?
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role    @relation(fields: [roleId], references: [id])
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, roleId, branchId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Журнал действий (ТЗ 2): кто, когда и что изменил. Хранение ≥ 3 лет.
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  entity     String
+  entityId   String
+  action     String // create | update | delete | stage_change | merge
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// ───────────── 3.1 Лиды и продажи ─────────────
+
+/// Этап воронки. Этапы настраиваются; isLost — этап «Отказ» с обязательной причиной.
+model PipelineStage {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  sort     Int
+  color    String  @default("#64748b")
+  isWon    Boolean @default(false)
+  isLost   Boolean @default(false)
+
+  leads Lead[]
+}
+
+model Lead {
+  id            String    @id @default(uuid())
+  branchId      String?
+  stageId       String
+  managerId     String?
+  firstName     String
+  lastName      String?
+  phone         String?
+  email         String?
+  source        String    @default("manual") // site | whatsapp | telegram | instagram | call | manual | referral
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmContent    String?
+  utmTerm       String?
+  currentLevel  String? // A1 … C2
+  targetLevel   String?
+  goal          String? // exam | work | study | family | other
+  preferredTime String?
+  lostReason    String?
+  levelTestScore Int?
+  firstContactAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  mergedIntoId  String?
+
+  branch     Branch?        @relation(fields: [branchId], references: [id])
+  stage      PipelineStage  @relation(fields: [stageId], references: [id])
+  manager    User?          @relation("LeadManager", fields: [managerId], references: [id])
+  activities LeadActivity[]
+  tasks      Task[]
+  student    Student?
+
+  @@index([phone])
+  @@index([email])
+  @@index([stageId])
+}
+
+/// История коммуникаций: комментарий, звонок, сообщение, смена этапа.
+model LeadActivity {
+  id        String   @id @default(uuid())
+  leadId    String
+  userId    String?
+  type      String // comment | call | message | stage_change | system
+  text      String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model Task {
+  id         String    @id @default(uuid())
+  leadId     String?
+  assigneeId String
+  title      String
+  dueAt      DateTime
+  doneAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  lead     Lead? @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignee User  @relation("TaskAssignee", fields: [assigneeId], references: [id])
+}
+
+// ───────────── 3.2 Клиенты и студенты ─────────────
+
+model Student {
+  id            String    @id @default(uuid())
+  userId        String?   @unique
+  leadId        String?   @unique
+  branchId      String
+  firstName     String
+  lastName      String
+  birthDate     DateTime?
+  phone         String?
+  email         String?
+  currentLevel  String?
+  targetLevel   String?
+  goal          String?
+  preferredTime String?
+  status        String    @default("active") // active | paused | finished | left
+  balance       Decimal   @default(0) @db.Decimal(12, 2)
+  consentAt     DateTime? // согласие на обработку ПД
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user     User?          @relation(fields: [userId], references: [id])
+  lead     Lead?          @relation(fields: [leadId], references: [id])
+  branch   Branch         @relation(fields: [branchId], references: [id])
+  parents  ParentStudent[]
+  groups   GroupStudent[]
+  attendance Attendance[]
+  grades   Grade[]
+  payments Payment[]
+  submissions HomeworkSubmission[]
+
+  @@index([branchId, status])
+}
+
+/// Связка «родитель — ребёнок»; isPayer — плательщик.
+model ParentStudent {
+  parentId  String
+  studentId String
+  isPayer   Boolean @default(true)
+
+  parent  User    @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([parentId, studentId])
+}
+
+// ───────────── 3.4 Курсы и группы ─────────────
+
+model Course {
+  id             String  @id @default(uuid())
+  name           String
+  level          String // A1.1 … C2
+  format         String // group | individual | mini_group | online
+  academicHours  Int
+  textbook       String?
+  price          Decimal @db.Decimal(12, 2)
+  isActive       Boolean @default(true)
+
+  groups Group[]
+}
+
+model Group {
+  id          String    @id @default(uuid())
+  branchId    String
+  courseId    String
+  teacherId   String?
+  roomId      String?
+  name        String
+  minStudents Int       @default(4)
+  maxStudents Int       @default(12)
+  startDate   DateTime?
+  endDate     DateTime?
+  status      String    @default("recruiting") // recruiting | running | finished
+  scheduleRule Json? // {"days":[1,3,5],"start":"19:00","end":"20:30"}
+
+  branch   Branch         @relation(fields: [branchId], references: [id])
+  course   Course         @relation(fields: [courseId], references: [id])
+  teacher  User?          @relation("GroupTeacher", fields: [teacherId], references: [id])
+  room     Room?          @relation(fields: [roomId], references: [id])
+  students GroupStudent[]
+  lessons  Lesson[]
+  homework Homework[]
+}
+
+model GroupStudent {
+  groupId   String
+  studentId String
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+  waitlist  Boolean   @default(false)
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, studentId])
+}
+
+// ───────────── 3.3 Расписание, 3.5 Посещаемость ─────────────
+
+model Lesson {
+  id         String   @id @default(uuid())
+  groupId    String
+  teacherId  String?
+  roomId     String?
+  startsAt   DateTime
+  endsAt     DateTime
+  status     String   @default("planned") // planned | done | cancelled | moved
+  topic      String?
+  onlineUrl  String?
+
+  group      Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  teacher    User?        @relation("LessonTeacher", fields: [teacherId], references: [id])
+  room       Room?        @relation(fields: [roomId], references: [id])
+  attendance Attendance[]
+
+  @@index([startsAt])
+}
+
+model Attendance {
+  lessonId  String
+  studentId String
+  status    String // present | excused | absent | late
+  markedAt  DateTime @default(now())
+
+  lesson  Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, studentId])
+}
+
+/// Оценка по навыкам Goethe: Hören, Lesen, Schreiben, Sprechen.
+model Grade {
+  id        String   @id @default(uuid())
+  studentId String
+  lessonId  String?
+  skill     String // hoeren | lesen | schreiben | sprechen | overall
+  value     Decimal  @db.Decimal(6, 2)
+  scale     String   @default("percent") // points | percent | de_1_6
+  comment   String?
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// ───────────── 3.6 Домашние задания ─────────────
+
+model Homework {
+  id          String   @id @default(uuid())
+  groupId     String
+  title       String
+  description String?
+  attachments Json?
+  dueAt       DateTime?
+  createdAt   DateTime @default(now())
+
+  group       Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  submissions HomeworkSubmission[]
+}
+
+model HomeworkSubmission {
+  id          String    @id @default(uuid())
+  homeworkId  String
+  studentId   String
+  text        String?
+  attachments Json?
+  submittedAt DateTime  @default(now())
+  grade       Decimal?  @db.Decimal(6, 2)
+  feedback    String?
+  checkedAt   DateTime?
+
+  homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([homeworkId, studentId])
+}
+
+// ───────────── 3.7 Финансы ─────────────
+
+model Payment {
+  id        String   @id @default(uuid())
+  branchId  String
+  studentId String
+  amount    Decimal  @db.Decimal(12, 2)
+  currency  String   @default("KGS")
+  method    String // cash | transfer | qr | card_online
+  comment   String?
+  paidAt    DateTime @default(now())
+  deletedAt DateTime?
+  deleteReason String?
+
+  branch  Branch  @relation(fields: [branchId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@index([paidAt])
+}

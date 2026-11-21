@@ -1,0 +1,300 @@
+/**
+ * Локализация интерфейса (ТЗ 1.5): русский и кыргызский обязательно, немецкий и английский — по выбору.
+ * Тексты вынесены в словари; язык переключается без перезагрузки.
+ * Отсутствующий перевод берётся из русского.
+ */
+import { createContext, ReactNode, useCallback, useContext, useState } from 'react';
+
+const ru = {
+  appName: 'Deutschzentrum CRM',
+  login: 'Вход',
+  loginField: 'E-mail или телефон',
+  password: 'Пароль',
+  signIn: 'Войти',
+  logout: 'Выйти',
+  role: 'Роль',
+  allBranches: 'Все филиалы',
+  dashboard: 'Дашборд',
+  leads: 'Лиды',
+  students: 'Студенты',
+  tasks: 'Задачи',
+  settings: 'Настройки',
+  roles: 'Роли и права',
+  users: 'Сотрудники',
+  branches: 'Филиалы',
+  audit: 'Журнал действий',
+  search: 'Поиск…',
+  add: 'Добавить',
+  save: 'Сохранить',
+  cancel: 'Отмена',
+  close: 'Закрыть',
+  edit: 'Изменить',
+  name: 'Имя',
+  firstName: 'Имя',
+  lastName: 'Фамилия',
+  phone: 'Телефон',
+  email: 'E-mail',
+  branch: 'Филиал',
+  manager: 'Менеджер',
+  source: 'Источник',
+  stage: 'Этап',
+  level: 'Уровень',
+  currentLevel: 'Текущий уровень',
+  targetLevel: 'Целевой уровень',
+  goal: 'Цель обучения',
+  preferredTime: 'Желаемое время',
+  status: 'Статус',
+  balance: 'Баланс',
+  createdAt: 'Создан',
+  kanban: 'Канбан',
+  list: 'Список',
+  newLead: 'Новый лид',
+  newStudent: 'Новый студент',
+  lostReason: 'Причина отказа',
+  lostReasonPrompt: 'Укажите причину отказа',
+  comment: 'Комментарий',
+  call: 'Звонок',
+  message: 'Сообщение',
+  history: 'История',
+  addComment: 'Добавить запись',
+  convert: 'Перевести в студенты',
+  merge: 'Объединить',
+  duplicates: 'Возможные дубли',
+  dueAt: 'Срок',
+  done: 'Готово',
+  overdue: 'Просрочено',
+  newTask: 'Новая задача',
+  noData: 'Нет данных',
+  newLeadsToday: 'Новых лидов сегодня',
+  newLeadsMonth: 'Лидов за месяц',
+  conversion: 'Конверсия за месяц',
+  activeStudents: 'Активных студентов',
+  debtors: 'С задолженностью',
+  overdueTasks: 'Просроченных задач',
+  revenueMonth: 'Выручка за месяц',
+  funnel: 'Воронка продаж',
+  onlyDebt: 'Только должники',
+  permissions: 'Права',
+  module: 'Модуль',
+  newRole: 'Новая роль',
+  systemRole: 'системная',
+  code: 'Код',
+  active: 'Активен',
+  when: 'Когда',
+  who: 'Кто',
+  action: 'Действие',
+  entity: 'Объект',
+  address: 'Адрес',
+  utm: 'UTM-метки',
+  groups: 'Группы',
+  payments: 'Оплаты',
+  parents: 'Родители',
+  consent: 'Согласие на обработку ПД',
+  yes: 'Да',
+  no: 'Нет',
+  error: 'Ошибка',
+  'act.read': 'Чтение',
+  'act.create': 'Создание',
+  'act.update': 'Изменение',
+  'act.delete': 'Удаление',
+  'act.export': 'Экспорт',
+  'src.site': 'Сайт',
+  'src.whatsapp': 'WhatsApp',
+  'src.telegram': 'Telegram',
+  'src.instagram': 'Instagram',
+  'src.call': 'Звонок',
+  'src.referral': 'Рекомендация',
+  'src.manual': 'Вручную',
+  'goal.exam': 'Экзамен',
+  'goal.work': 'Работа',
+  'goal.study': 'Учёба в Германии',
+  'goal.family': 'Воссоединение семьи',
+  'goal.other': 'Другое',
+  'st.active': 'Активен',
+  'st.paused': 'На паузе',
+  'st.finished': 'Завершил',
+  'st.left': 'Ушёл',
+};
+
+type Dict = Partial<Record<keyof typeof ru, string>>;
+
+const ky: Dict = {
+  login: 'Кирүү',
+  loginField: 'E-mail же телефон',
+  password: 'Сырсөз',
+  signIn: 'Кирүү',
+  logout: 'Чыгуу',
+  role: 'Ролу',
+  allBranches: 'Бардык филиалдар',
+  dashboard: 'Башкы панель',
+  leads: 'Лиддер',
+  students: 'Студенттер',
+  tasks: 'Тапшырмалар',
+  settings: 'Жөндөөлөр',
+  roles: 'Ролдор жана укуктар',
+  users: 'Кызматкерлер',
+  branches: 'Филиалдар',
+  audit: 'Аракеттер журналы',
+  search: 'Издөө…',
+  add: 'Кошуу',
+  save: 'Сактоо',
+  cancel: 'Жокко чыгаруу',
+  close: 'Жабуу',
+  edit: 'Өзгөртүү',
+  name: 'Аты',
+  firstName: 'Аты',
+  lastName: 'Фамилиясы',
+  phone: 'Телефон',
+  branch: 'Филиал',
+  manager: 'Менеджер',
+  source: 'Булак',
+  stage: 'Баскыч',
+  level: 'Деңгээл',
+  currentLevel: 'Учурдагы деңгээл',
+  targetLevel: 'Максаттуу деңгээл',
+  goal: 'Окуу максаты',
+  preferredTime: 'Ыңгайлуу убакыт',
+  status: 'Абалы',
+  balance: 'Баланс',
+  createdAt: 'Түзүлгөн',
+  kanban: 'Канбан',
+  list: 'Тизме',
+  newLead: 'Жаңы лид',
+  newStudent: 'Жаңы студент',
+  lostReason: 'Баш тартуу себеби',
+  lostReasonPrompt: 'Баш тартуу себебин көрсөтүңүз',
+  comment: 'Комментарий',
+  call: 'Чалуу',
+  message: 'Билдирүү',
+  history: 'Тарых',
+  addComment: 'Жазуу кошуу',
+  convert: 'Студенттерге которуу',
+  merge: 'Бириктирүү',
+  duplicates: 'Мүмкүн болгон дублдар',
+  dueAt: 'Мөөнөтү',
+  done: 'Аткарылды',
+  overdue: 'Мөөнөтү өттү',
+  newTask: 'Жаңы тапшырма',
+  noData: 'Маалымат жок',
+  newLeadsToday: 'Бүгүнкү жаңы лиддер',
+  newLeadsMonth: 'Айдагы лиддер',
+  conversion: 'Айдагы конверсия',
+  activeStudents: 'Активдүү студенттер',
+  debtors: 'Карызы барлар',
+  overdueTasks: 'Мөөнөтү өткөн тапшырмалар',
+  revenueMonth: 'Айдагы киреше',
+  funnel: 'Сатуу воронкасы',
+  onlyDebt: 'Карыздарлар гана',
+  permissions: 'Укуктар',
+  module: 'Модуль',
+  newRole: 'Жаңы роль',
+  systemRole: 'системалык',
+  code: 'Код',
+  active: 'Активдүү',
+  when: 'Качан',
+  who: 'Ким',
+  action: 'Аракет',
+  entity: 'Объект',
+  address: 'Дарек',
+  utm: 'UTM-белгилер',
+  groups: 'Топтор',
+  payments: 'Төлөмдөр',
+  parents: 'Ата-энелер',
+  consent: 'Жеке маалыматтарды иштетүүгө макулдук',
+  yes: 'Ооба',
+  no: 'Жок',
+  error: 'Ката',
+  'act.read': 'Окуу',
+  'act.create': 'Түзүү',
+  'act.update': 'Өзгөртүү',
+  'act.delete': 'Өчүрүү',
+  'act.export': 'Экспорт',
+  'src.site': 'Сайт',
+  'src.call': 'Чалуу',
+  'src.referral': 'Сунуштама',
+  'src.manual': 'Кол менен',
+  'goal.exam': 'Экзамен',
+  'goal.work': 'Иш',
+  'goal.study': 'Германияда окуу',
+  'goal.family': 'Үй-бүлө менен кошулуу',
+  'goal.other': 'Башка',
+  'st.active': 'Активдүү',
+  'st.paused': 'Тыныгууда',
+  'st.finished': 'Бүтүрдү',
+  'st.left': 'Кетти',
+};
+
+const de: Dict = {
+  login: 'Anmeldung',
+  loginField: 'E-Mail oder Telefon',
+  password: 'Passwort',
+  signIn: 'Anmelden',
+  logout: 'Abmelden',
+  dashboard: 'Dashboard',
+  leads: 'Leads',
+  students: 'Schüler',
+  tasks: 'Aufgaben',
+  settings: 'Einstellungen',
+  search: 'Suche…',
+  save: 'Speichern',
+  cancel: 'Abbrechen',
+};
+
+const en: Dict = {
+  login: 'Sign in',
+  loginField: 'E-mail or phone',
+  password: 'Password',
+  signIn: 'Sign in',
+  logout: 'Sign out',
+  dashboard: 'Dashboard',
+  leads: 'Leads',
+  students: 'Students',
+  tasks: 'Tasks',
+  settings: 'Settings',
+  search: 'Search…',
+  save: 'Save',
+  cancel: 'Cancel',
+};
+
+export const LOCALES = { ru: 'Рус', ky: 'Кыр', de: 'Deu', en: 'Eng' } as const;
+export type Locale = keyof typeof LOCALES;
+export type TKey = keyof typeof ru;
+const dicts: Record<Locale, Dict> = { ru, ky, de, en };
+
+interface I18n {
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+  t: (k: TKey | string) => string;
+}
+
+const Ctx = createContext<I18n>(null!);
+
+function initial(): Locale {
+  try {
+    const l = localStorage.getItem('crm.locale') as Locale | null;
+    if (l && l in LOCALES) return l;
+  } catch {
+    /* нет доступа к хранилищу */
+  }
+  return 'ru';
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, set] = useState<Locale>(initial);
+  const setLocale = useCallback((l: Locale) => {
+    set(l);
+    document.documentElement.lang = l;
+    try {
+      localStorage.setItem('crm.locale', l);
+    } catch {
+      /* нет доступа к хранилищу */
+    }
+  }, []);
+  const t = useCallback(
+    (k: string) => (dicts[locale] as Record<string, string>)[k] ?? (ru as Record<string, string>)[k] ?? k,
+    [locale],
+  );
+  return <Ctx.Provider value={{ locale, setLocale, t }}>{children}</Ctx.Provider>;
+}
+
+export const useI18n = () => useContext(Ctx);
