@@ -69,7 +69,7 @@ export class CoursesController {
   list(@Query('all') all?: string) {
     return this.prisma.course.findMany({
       where: all === '1' ? {} : { isActive: true },
-      include: { _count: { select: { groups: true } } },
+      include: { _count: { select: { groups: true, topics: true } } },
       orderBy: [{ level: 'asc' }, { name: 'asc' }],
     });
   }

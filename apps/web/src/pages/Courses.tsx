@@ -4,6 +4,7 @@ import { api, qs } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
 import { EnumSelect, ErrorText, Field, fmtMoney, Modal } from '../ui';
+import { TopicsModal } from './Journal';
 import { useBranches } from './Leads';
 
 export const COURSE_LEVELS = ['A1', 'A1.1', 'A1.2', 'A2', 'A2.1', 'A2.2', 'B1', 'B1.1', 'B1.2', 'B2', 'B2.1', 'B2.2', 'C1', 'C2'];
@@ -18,7 +19,7 @@ export interface Course {
   textbook: string | null;
   price: string;
   isActive: boolean;
-  _count?: { groups: number };
+  _count?: { groups: number; topics: number };
 }
 
 export interface Room {
@@ -43,6 +44,7 @@ export function CoursesPage() {
   const { can } = useAuth();
   const courses = useCourses(true);
   const [edit, setEdit] = useState<Partial<Course> | null>(null);
+  const [plan, setPlan] = useState<Course | null>(null);
 
   return (
     <>
@@ -65,6 +67,7 @@ export function CoursesPage() {
               <th>{t('textbook')}</th>
               <th>{t('price')}</th>
               <th>{t('groups')}</th>
+              <th>{t('curriculum')}</th>
             </tr>
           </thead>
           <tbody>
@@ -79,11 +82,23 @@ export function CoursesPage() {
                 <td>{c.textbook ?? '—'}</td>
                 <td>{fmtMoney(c.price)}</td>
                 <td>{c._count?.groups ?? 0}</td>
+                <td>
+                  <button
+                    className="small"
+                    disabled={!can('groups.update')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPlan(c);
+                    }}
+                  >
+                    {t('topics')}: {c._count?.topics ?? 0}
+                  </button>
+                </td>
               </tr>
             ))}
             {courses.data?.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">
+                <td colSpan={8} className="muted">
                   {t('noData')}
                 </td>
               </tr>
@@ -92,6 +107,15 @@ export function CoursesPage() {
         </table>
       </div>
       {edit && <CourseModal course={edit} onClose={() => setEdit(null)} />}
+      {plan && (
+        <TopicsModal
+          course={plan}
+          onClose={() => {
+            setPlan(null);
+            courses.refetch();
+          }}
+        />
+      )}
     </>
   );
 }

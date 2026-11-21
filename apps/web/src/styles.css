@@ -211,3 +211,35 @@ tr.click:hover td { background: var(--surface-2); }
   .month .md { min-height: 64px; padding: 2px; }
   .month .mev { font-size: 10px; padding: 0 2px; }
 }
+
+/* Attendance */
+.marks { display: flex; flex-direction: column; gap: 6px; }
+.mark-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.mark-row .who { flex: 1; min-width: 160px; }
+.at-seg button { padding: 8px 10px; min-height: 40px; }
+.at-seg button.on.at-on-present { background: rgb(22 163 74 / 15%); color: var(--success); }
+.at-seg button.on.at-on-late { background: rgb(217 119 6 / 15%); color: var(--warning); }
+.at-seg button.on.at-on-excused { background: var(--primary-soft); color: var(--primary); }
+.at-seg button.on.at-on-absent { background: rgb(220 38 38 / 14%); color: var(--danger); }
+@media (max-width: 600px) {
+  .at-seg { width: 100%; }
+  .at-seg button { flex: 1; justify-content: center; }
+  .at-seg .lbl { display: none; }
+}
+.at { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; font-size: 12px; font-weight: 700; }
+.at-present { color: var(--success); background: rgb(22 163 74 / 12%); }
+.at-late { color: var(--warning); background: rgb(217 119 6 / 14%); }
+.at-excused { color: var(--primary); background: var(--primary-soft); }
+.at-absent { color: var(--danger); background: rgb(220 38 38 / 12%); }
+.at-none { color: var(--muted); }
+.journal th, .journal td { padding: 6px 8px; }
+.journal .sticky { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.journal th.sticky { background: var(--surface-2); }
+.today { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+.lesson-card { display: flex; align-items: center; gap: 14px; text-align: left; width: 100%; padding: 14px 16px; }
+.lesson-card .time { font-weight: 700; font-size: 15px; min-width: 96px; }
+.lesson-card.cancelled { opacity: .55; text-decoration: line-through; }
+.badge.ok { color: var(--success); border-color: var(--success); }
+.skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.skill .bar { margin-top: 4px; }
+.lesson-card .grow { flex: 1; min-width: 0; }

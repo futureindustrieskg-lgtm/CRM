@@ -17,6 +17,7 @@ import {
   Modal,
   STATUSES,
 } from '../ui';
+import { StudentProgress } from './Journal';
 import { useBranches } from './Leads';
 
 interface Student {
@@ -310,6 +311,7 @@ function StudentDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             )}
           </dl>
 
+          <StudentProgress studentId={s.id} />
           <h3>{t('groups')}</h3>
           {s.groups.length ? (
             <ul>

@@ -6,6 +6,7 @@ import { AuditPage, BranchesPage, RolesPage, UsersPage } from './pages/Admin';
 import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
 import { GroupsPage } from './pages/Groups';
+import { LearningSettingsPage, TodayPage } from './pages/Journal';
 import { LeadsPage, useBranches } from './pages/Leads';
 import { setTimezone } from './tz';
 import { SchedulePage } from './pages/Schedule';
@@ -90,6 +91,7 @@ function Layout() {
     { to: '/leads', label: t('leads'), show: can('leads.read') },
     { to: '/tasks', label: t('tasks'), show: can('leads.read') },
     { to: '/students', label: t('students'), show: can('students.read') },
+    { to: '/today', label: t('myLessons'), show: can('attendance.create') },
     { to: '/schedule', label: t('schedule'), show: can('schedule.read') },
     { to: '/groups', label: t('groups'), show: can('groups.read') },
     { to: '/courses', label: t('courses'), show: can('groups.read') },
@@ -99,6 +101,7 @@ function Layout() {
     { to: '/roles', label: t('roles'), show: can('roles.read') },
     { to: '/branches', label: t('branches'), show: can('branches.read') || can('branches.update') },
     { to: '/rooms', label: t('rooms'), show: can('schedule.update') },
+    { to: '/learning-rules', label: t('learningRules'), show: can('branches.update') },
     { to: '/audit', label: t('audit'), show: can('audit.read') },
   ].filter((n) => n.show);
 
@@ -158,6 +161,8 @@ function Layout() {
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/students" element={<StudentsPage />} />
             <Route path="/students/:id" element={<StudentsPage />} />
+            <Route path="/today" element={<TodayPage />} />
+            <Route path="/learning-rules" element={<LearningSettingsPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/groups/:id" element={<GroupsPage />} />

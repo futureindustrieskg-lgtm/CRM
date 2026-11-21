@@ -8,6 +8,7 @@ import { zparts } from '../tz';
 import { Conflict, ConflictList, Drawer, EnumSelect, ErrorText, Field, fmtDate, fmtMoney, fmtTime, Modal } from '../ui';
 import { Course, useCourses, useRooms } from './Courses';
 import { useBranches } from './Leads';
+import { GroupJournal } from './Journal';
 import { LessonModal, Lesson } from './Schedule';
 
 export const GROUP_STATUSES = ['recruiting', 'running', 'finished'];
@@ -352,7 +353,7 @@ function GroupForm({ group, onDone }: { group?: GroupFull; onDone: (id?: string)
 function GroupDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const { t } = useI18n();
   const { can } = useAuth();
-  const [tab, setTab] = useState<'members' | 'lessons' | 'params'>('members');
+  const [tab, setTab] = useState<'members' | 'journal' | 'lessons' | 'params'>('members');
   const [nextLevel, setNextLevel] = useState(false);
   const q = useQuery({ queryKey: ['group', id], queryFn: () => api<GroupFull>(`/groups/${id}`) });
   const g = q.data;
@@ -397,8 +398,8 @@ function GroupDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             </dd>
           </dl>
           <div className="tabs" role="tablist">
-            {(['members', 'lessons', 'params'] as const)
-              .filter((k) => k !== 'params' || can('groups.update'))
+            {(['members', 'journal', 'lessons', 'params'] as const)
+              .filter((k) => (k !== 'params' || can('groups.update')) && (k !== 'journal' || can('attendance.read')))
               .map((k) => (
                 <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
                   {t(k)}
@@ -408,6 +409,7 @@ function GroupDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               ))}
           </div>
           {tab === 'members' && <Members g={g} />}
+          {tab === 'journal' && <GroupJournal groupId={g.id} />}
           {tab === 'lessons' && <Lessons g={g} />}
           {tab === 'params' && <GroupForm group={g} onDone={() => undefined} />}
           {nextLevel && <NextLevelModal g={g} onClose={() => setNextLevel(false)} />}

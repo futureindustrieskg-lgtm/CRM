@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import { addDays, addMonths, dayOfMonth, labelDate, mondayOf, monthOf, weekday, zDate, zonedToUtc, zparts, zTime } from '../tz';
 import { ErrorText, Field, fmtDate, fmtTime, Modal } from '../ui';
 import { useRooms } from './Courses';
+import { AttendanceModal } from './Journal';
 import { useGroups, useTeachers } from './Groups';
 import { useBranches } from './Leads';
 
@@ -345,6 +346,7 @@ export function LessonModal({ lesson, onClose, onGroup }: { lesson: Lesson; onCl
     reason: '',
   });
   const [cancelReason, setCancelReason] = useState<string | null>(null);
+  const [journal, setJournal] = useState(false);
   const editable = can('schedule.update') && lesson.status !== 'cancelled';
   const done = () => {
     qc.invalidateQueries({ queryKey: ['lessons'] });
@@ -381,6 +383,8 @@ export function LessonModal({ lesson, onClose, onGroup }: { lesson: Lesson; onCl
     save.mutate();
   };
 
+  if (journal) return <AttendanceModal lessonId={lesson.id} onClose={() => setJournal(false)} />;
+
   return (
     <Modal title={`${t('lesson')}: ${lesson.group?.name ?? ''}`} onClose={onClose}>
       <div className="row" style={{ marginBottom: 12 }}>
@@ -389,8 +393,13 @@ export function LessonModal({ lesson, onClose, onGroup }: { lesson: Lesson; onCl
           {fmtDate(lesson.startsAt, false)} {fmtTime(s)}–{fmtTime(e)}
         </span>
         {lesson.group?.course && <span className="muted">{lesson.group.course.name}</span>}
+        {can('attendance.read') && lesson.status !== 'cancelled' && (
+          <button type="button" className="small" style={{ marginLeft: 'auto' }} onClick={() => setJournal(true)}>
+            {t('journal')}
+          </button>
+        )}
         {onGroup && lesson.group && (
-          <button type="button" className="small" style={{ marginLeft: 'auto' }} onClick={() => onGroup(lesson.group!.id)}>
+          <button type="button" className="small" onClick={() => onGroup(lesson.group!.id)}>
             {t('group')} →
           </button>
         )}

@@ -10,6 +10,7 @@
  *   teacher@crm.test    — преподаватель + администратор филиала «Юг» (две роли)
  *   teacher2@crm.test   — преподаватель, филиал «Центр»
  *   accountant@crm.test — бухгалтер
+ *   parent@crm.test     — родитель студента Руслана Бекмуратова
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -205,12 +206,69 @@ async function main() {
         consentAt: new Date(),
       },
     });
-    await prisma.groupStudent.create({ data: { groupId: isSouth ? g2.id : g1.id, studentId: s.id } });
+    await prisma.groupStudent.create({
+      data: { groupId: isSouth ? g2.id : g1.id, studentId: s.id, joinedAt: isSouth ? undefined : new Date(g1Start) },
+    });
     if (balance >= 0 && status === 'active') {
       await prisma.payment.create({
         data: { branchId: s.branchId, studentId: s.id, amount: isSouth ? 14000 : 9000, method: i % 2 ? 'cash' : 'qr' },
       });
     }
+  }
+
+  // Учебный план A1.1 (Menschen A1.1): 24 урока по 2 ак. часа.
+  const plan = [
+    ['Lektion 1', 'Hallo! Ich bin Nicole'], ['Lektion 1', 'Begrüßung, Alphabet'],
+    ['Lektion 2', 'Ich bin Journalistin'], ['Lektion 2', 'Berufe, Zahlen bis 100'],
+    ['Lektion 3', 'Das ist meine Mutter'], ['Lektion 3', 'Familie, Possessivartikel'],
+    ['Lektion 4', 'Der Tisch ist schön!'], ['Lektion 4', 'Möbel, bestimmter Artikel'],
+    ['Lektion 5', 'Was ist das? — Das ist ein F.'], ['Lektion 5', 'Gegenstände, unbestimmter Artikel'],
+    ['Lektion 6', 'Ich brauche kein Büro'], ['Lektion 6', 'Negation kein/keine'],
+    ['Modul-Plus 1', 'Wiederholung, Test 1'], ['Lektion 7', 'Du kannst wirklich toll …!'],
+    ['Lektion 7', 'Modalverb können'], ['Lektion 8', 'Kein Problem. Ich habe Zeit!'],
+    ['Lektion 8', 'Uhrzeit, Wochentage'], ['Lektion 9', 'Ich möchte was essen, Onkel Harry'],
+    ['Lektion 9', 'Essen und Trinken, möchten'], ['Lektion 10', 'Ich steige jetzt in die U-Bahn ein'],
+    ['Lektion 10', 'Trennbare Verben'], ['Lektion 11', 'Ich habe Zeit'], ['Lektion 12', 'Wiederholung'],
+    ['Modul-Plus 2', 'Abschlusstest A1.1'],
+  ];
+  await prisma.courseTopic.createMany({
+    data: plan.map(([chapter, title], i) => ({ courseId: a1.id, sort: i + 1, chapter, title })),
+  });
+  const topics = await prisma.courseTopic.findMany({ where: { courseId: a1.id }, orderBy: { sort: 'asc' } });
+
+  // Родитель Руслана — получит уведомление о серии пропусков.
+  const ruslan = await prisma.student.findFirstOrThrow({ where: { lastName: 'Бекмуратов' } });
+  const parent = await mk('parent@crm.test', 'Гульмира', 'Бекмуратова', [{ roleId: role.parent, branchId: center.id }]);
+  await prisma.parentStudent.create({ data: { parentId: parent.id, studentId: ruslan.id } });
+
+  // Посещаемость и оценки за прошедшие занятия A1.1.
+  const past = await prisma.lesson.findMany({
+    where: { groupId: g1.id, endsAt: { lt: new Date() } },
+    orderBy: { startsAt: 'asc' },
+  });
+  const members = await prisma.groupStudent.findMany({ where: { groupId: g1.id }, include: { student: true } });
+  for (const [i, l] of past.entries()) {
+    const last = i === past.length - 1;
+    for (const m of members) {
+      const ln = m.student.lastName;
+      const status =
+        ln === 'Бекмуратов' ? (last ? 'absent' : i === 2 ? 'late' : 'present')
+        : ln === 'Абдиева' ? (i >= past.length - 3 ? 'excused' : 'present')
+        : ln === 'Жумабаева' && i === 4 ? 'late'
+        : 'present';
+      await prisma.attendance.create({
+        data: { lessonId: l.id, studentId: m.studentId, status, charged: status !== 'excused', markedById: teacher2.id, markedAt: l.endsAt },
+      });
+      if (i % 3 === 2 && status !== 'absent' && status !== 'excused') {
+        const base = ln === 'Жумабаева' ? 88 : ln === 'Бекмуратов' ? 64 : 75;
+        for (const skill of ['hoeren', 'sprechen']) {
+          await prisma.grade.create({
+            data: { lessonId: l.id, studentId: m.studentId, skill, value: base + ((i * 7) % 10) - (skill === 'sprechen' ? 6 : 0), createdById: teacher2.id },
+          });
+        }
+      }
+    }
+    await prisma.lesson.update({ where: { id: l.id }, data: { status: 'done', courseTopicId: topics[i]?.id } });
   }
 
   console.log('Демо-данные созданы.');

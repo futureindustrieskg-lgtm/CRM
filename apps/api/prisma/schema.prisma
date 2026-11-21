@@ -65,6 +65,7 @@ model User {
   parentLinks   ParentStudent[]
   teachingGroups Group[]       @relation("GroupTeacher")
   lessons       Lesson[]       @relation("LessonTeacher")
+  notifications Notification[]
 }
 
 /// Роль — набор прав. Права: "<модуль>.<действие>", например "leads.read", "finance.delete_records".
@@ -263,6 +264,21 @@ model Course {
   isActive       Boolean @default(true)
 
   groups Group[]
+  topics CourseTopic[]
+}
+
+/// Учебный план уровня: темы уроков и главы учебника (ТЗ 3.4).
+model CourseTopic {
+  id       String  @id @default(uuid())
+  courseId String
+  sort     Int
+  title    String
+  chapter  String?
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId, sort])
 }
 
 model Group {
@@ -318,6 +334,9 @@ model Lesson {
   teacher    User?        @relation("LessonTeacher", fields: [teacherId], references: [id])
   room       Room?        @relation(fields: [roomId], references: [id])
   attendance Attendance[]
+  grades     Grade[]
+  courseTopicId String?
+  courseTopic   CourseTopic? @relation(fields: [courseTopicId], references: [id], onDelete: SetNull)
 
   @@index([startsAt])
 }
@@ -326,6 +345,10 @@ model Attendance {
   lessonId  String
   studentId String
   status    String // present | excused | absent | late
+  /// Занятие списано с абонемента по правилам центра на момент отметки.
+  charged   Boolean  @default(false)
+  comment   String?
+  markedById String?
   markedAt  DateTime @default(now())
 
   lesson  Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -342,10 +365,44 @@ model Grade {
   skill     String // hoeren | lesen | schreiben | sprechen | overall
   value     Decimal  @db.Decimal(6, 2)
   scale     String   @default("percent") // points | percent | de_1_6
+  /// Максимум для шкалы points (например, 100 баллов за модуль Goethe).
+  maxValue  Decimal? @db.Decimal(6, 2)
   comment   String?
+  createdById String?
   createdAt DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lesson  Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, skill])
+}
+
+// ───────────── Настройки центра ─────────────
+
+/// Правила центра (списание занятий, шкала оценок, порог пропусков): ключ → JSON.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ───────────── Очередь уведомлений ─────────────
+
+/// Исходящие уведомления. Отправка по каналам (push, WhatsApp, Telegram, SMS, e-mail) — итерация 8.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  studentId String?
+  type      String // absence_streak | …
+  title     String
+  body      String
+  status    String    @default("queued") // queued | sent | failed
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }
 
 // ───────────── 3.6 Домашние задания ─────────────

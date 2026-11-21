@@ -94,6 +94,7 @@ export class LessonsController {
         },
         teacher: { select: { id: true, firstName: true, lastName: true } },
         room: { select: { id: true, name: true, isOnline: true } },
+        _count: { select: { attendance: true } },
       },
       orderBy: { startsAt: 'asc' },
       take: 2000,
