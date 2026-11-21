@@ -31,7 +31,8 @@ let memory: Session | null = getSession();
 let refreshing: Promise<boolean> | null = null;
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** data — тело ответа об ошибке (например, список конфликтов расписания при 409). */
+  constructor(public status: number, message: string, public data?: any) {
     super(message);
   }
 }
@@ -71,13 +72,14 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   }
   if (!res.ok) {
     let msg = res.statusText;
+    let data: any;
     try {
-      const data = await res.json();
+      data = await res.json();
       msg = Array.isArray(data.message) ? data.message.join('; ') : data.message ?? msg;
     } catch {
       /* пустой ответ */
     }
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, data);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

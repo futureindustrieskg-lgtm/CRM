@@ -8,11 +8,13 @@
  *   manager@crm.test    — менеджер по продажам, филиал «Центр»
  *   manager2@crm.test   — менеджер по продажам, филиал «Юг»
  *   teacher@crm.test    — преподаватель + администратор филиала «Юг» (две роли)
+ *   teacher2@crm.test   — преподаватель, филиал «Центр»
  *   accountant@crm.test — бухгалтер
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { DEFAULT_ROLES } from '../src/common/permissions';
+import { generateSlots, localDate } from '../src/schedule/time';
 
 const prisma = new PrismaClient();
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'Demo2026!crm';
@@ -84,6 +86,7 @@ async function main() {
     { roleId: role.teacher, branchId: south.id },
     { roleId: role.branch_admin, branchId: south.id },
   ]);
+  const teacher2 = await mk('teacher2@crm.test', 'Thomas', 'Weber', [{ roleId: role.teacher, branchId: center.id }]);
   await mk('accountant@crm.test', 'Гульнара', 'Счётова', [{ roleId: role.accountant }]);
 
   // Лиды
@@ -136,17 +139,46 @@ async function main() {
   const b1 = await prisma.course.create({
     data: { name: 'Goethe B1 — подготовка', level: 'B1', format: 'mini_group', academicHours: 64, textbook: 'Mit Erfolg zu B1', price: 14000 },
   });
+  const room = Object.fromEntries(
+    (await prisma.room.findMany()).map((r) => [`${r.branchId === center.id ? 'c' : 's'}:${r.name}`, r.id]),
+  );
+  const tz = center.timezone;
+  // Группа центра идёт уже 3 недели; занятия созданы по шаблону на весь курс (48 ч / 2 ч).
+  const g1Start = localDate(new Date(Date.now() - 21 * 86_400_000), tz);
+  const g1Rule = { days: [1, 3, 5], start: '19:00', end: '20:30' };
   const g1 = await prisma.group.create({
     data: {
       branchId: center.id,
       courseId: a1.id,
+      teacherId: teacher2.id,
+      roomId: room['c:Berlin'],
       name: 'A1.1 вечер пн/ср/пт',
       status: 'running',
-      scheduleRule: { days: [1, 3, 5], start: '19:00', end: '20:30' },
+      minStudents: 3,
+      startDate: new Date(g1Start),
+      scheduleRule: g1Rule,
     },
   });
+  const g1Slots = generateSlots(g1Rule, g1Start, 24, tz);
+  await prisma.lesson.createMany({
+    data: g1Slots.map((s) => ({ groupId: g1.id, teacherId: teacher2.id, roomId: room['c:Berlin'], ...s })),
+  });
+  await prisma.group.update({ where: { id: g1.id }, data: { endDate: g1Slots[g1Slots.length - 1].endsAt } });
+
+  // Группа юга в наборе: шаблон есть, занятия ещё не созданы.
   const g2 = await prisma.group.create({
-    data: { branchId: south.id, courseId: b1.id, teacherId: teacher.id, name: 'B1 Goethe вт/чт', status: 'recruiting' },
+    data: {
+      branchId: south.id,
+      courseId: b1.id,
+      teacherId: teacher.id,
+      roomId: room['s:München'],
+      name: 'B1 Goethe вт/чт',
+      status: 'recruiting',
+      minStudents: 3,
+      maxStudents: 6,
+      startDate: new Date(localDate(new Date(Date.now() + 7 * 86_400_000), tz)),
+      scheduleRule: { days: [2, 4], start: '18:30', end: '20:00' },
+    },
   });
 
   const students: [string, string, string, string, number][] = [

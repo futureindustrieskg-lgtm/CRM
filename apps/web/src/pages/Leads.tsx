@@ -67,7 +67,7 @@ interface Staff {
 
 const useStages = () => useQuery({ queryKey: ['stages'], queryFn: () => api<Stage[]>('/pipeline/stages'), staleTime: 300_000 });
 export const useBranches = () =>
-  useQuery({ queryKey: ['branches'], queryFn: () => api<{ id: string; name: string }[]>('/branches'), staleTime: 300_000 });
+  useQuery({ queryKey: ['branches'], queryFn: () => api<{ id: string; name: string; timezone: string }[]>('/branches'), staleTime: 300_000 });
 const useStaff = () => useQuery({ queryKey: ['staff'], queryFn: () => api<Staff[]>('/users/staff'), staleTime: 300_000 });
 
 export function LeadsPage() {

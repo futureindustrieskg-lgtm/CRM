@@ -159,3 +159,55 @@ tr.click:hover td { background: var(--surface-2); }
 .matrix td, .matrix th { text-align: center; }
 .matrix td:first-child, .matrix th:first-child { text-align: left; }
 .matrix input { width: auto; }
+
+/* Conflicts */
+.conflicts { border: 1px solid var(--danger); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: rgb(220 38 38 / 6%); }
+.conflicts b { color: var(--danger); }
+.conflicts ul { margin: 6px 0 0; padding-left: 18px; }
+.conflicts li { margin: 3px 0; }
+.ok-box { border: 1px solid var(--success); color: var(--success); border-radius: 8px; padding: 8px 12px; margin: 10px 0; }
+.badge.cf-teacher { border-color: var(--warning); color: var(--warning); }
+.badge.cf-room { border-color: var(--primary); color: var(--primary); }
+.badge.cf-student { border-color: var(--danger); color: var(--danger); }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; white-space: nowrap; }
+.tabs button.on { border-bottom-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+/* Progress */
+.bar { height: 6px; border-radius: 99px; background: var(--border); overflow: hidden; min-width: 60px; }
+.bar > i { display: block; height: 100%; background: var(--primary); }
+.bar.full > i { background: var(--success); }
+
+/* Weekday picker */
+.days { display: flex; gap: 4px; flex-wrap: wrap; }
+.days button { width: 40px; justify-content: center; padding: 6px 0; }
+.days button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* Calendar */
+.cal-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.cal-head .title { font-weight: 600; font-size: 15px; min-width: 180px; }
+.week { display: grid; grid-template-columns: 52px repeat(var(--cols), minmax(110px, 1fr)); overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.week .dh { position: sticky; top: 0; z-index: 2; background: var(--surface-2); border-bottom: 1px solid var(--border); padding: 6px 8px; font-size: 12px; font-weight: 600; text-align: center; }
+.week .dh.today { color: var(--primary); }
+.week .hours { position: relative; border-right: 1px solid var(--border); }
+.week .hours span { position: absolute; right: 6px; font-size: 11px; color: var(--muted); transform: translateY(-50%); }
+.week .col { position: relative; border-left: 1px solid var(--border); background-image: linear-gradient(var(--border) 1px, transparent 1px); background-size: 100% var(--hour); }
+.week .col.today { background-color: rgb(29 78 216 / 4%); }
+.ev { position: absolute; left: 3px; right: 3px; border-radius: 6px; padding: 3px 6px; font-size: 12px; line-height: 1.25; overflow: hidden; cursor: pointer; border-left: 3px solid var(--primary); background: var(--primary-soft); color: var(--text); }
+.ev:hover { filter: brightness(.97); outline: 1px solid var(--primary); }
+.ev.cancelled { opacity: .55; text-decoration: line-through; border-left-color: var(--muted); background: var(--surface-2); }
+.ev .s { color: var(--muted); }
+.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.month .mh { background: var(--surface-2); padding: 6px; font-size: 12px; font-weight: 600; text-align: center; border-bottom: 1px solid var(--border); }
+.month .md { min-height: 96px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 4px; font-size: 12px; }
+.month .md.other { background: var(--surface-2); color: var(--muted); }
+.month .md.today .n { color: #fff; background: var(--primary); border-radius: 99px; padding: 0 6px; }
+.month .md .n { display: inline-block; margin-bottom: 2px; font-weight: 600; }
+.month .mev { display: block; border-radius: 4px; padding: 1px 4px; margin-bottom: 2px; background: var(--primary-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.month .mev.cancelled { text-decoration: line-through; opacity: .55; background: var(--surface-2); }
+@media (max-width: 600px) {
+  .month .md { min-height: 64px; padding: 2px; }
+  .month .mev { font-size: 10px; padding: 0 2px; }
+}

@@ -3,8 +3,12 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
 import { LOCALES, Locale, useI18n } from './i18n';
 import { AuditPage, BranchesPage, RolesPage, UsersPage } from './pages/Admin';
+import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
-import { LeadsPage } from './pages/Leads';
+import { GroupsPage } from './pages/Groups';
+import { LeadsPage, useBranches } from './pages/Leads';
+import { setTimezone } from './tz';
+import { SchedulePage } from './pages/Schedule';
 import { StudentsPage } from './pages/Students';
 import { TasksPage } from './pages/Tasks';
 import { ErrorText } from './ui';
@@ -77,17 +81,24 @@ function Layout() {
   const { me, activeRole, can, logout, switchRole } = useAuth();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  // Время в интерфейсе — по часовому поясу филиала активной роли.
+  const branches = useBranches();
+  setTimezone((branches.data?.find((b) => b.id === activeRole?.branchId) ?? branches.data?.[0])?.timezone);
 
   const nav = [
     { to: '/', label: t('dashboard'), show: true },
     { to: '/leads', label: t('leads'), show: can('leads.read') },
     { to: '/tasks', label: t('tasks'), show: can('leads.read') },
     { to: '/students', label: t('students'), show: can('students.read') },
+    { to: '/schedule', label: t('schedule'), show: can('schedule.read') },
+    { to: '/groups', label: t('groups'), show: can('groups.read') },
+    { to: '/courses', label: t('courses'), show: can('groups.read') },
   ];
   const admin = [
     { to: '/users', label: t('users'), show: can('users.read') },
     { to: '/roles', label: t('roles'), show: can('roles.read') },
     { to: '/branches', label: t('branches'), show: can('branches.read') || can('branches.update') },
+    { to: '/rooms', label: t('rooms'), show: can('schedule.update') },
     { to: '/audit', label: t('audit'), show: can('audit.read') },
   ].filter((n) => n.show);
 
@@ -147,6 +158,11 @@ function Layout() {
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/students" element={<StudentsPage />} />
             <Route path="/students/:id" element={<StudentsPage />} />
+            <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/groups/:id" element={<GroupsPage />} />
+            <Route path="/courses" element={<CoursesPage />} />
+            <Route path="/rooms" element={<RoomsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/branches" element={<BranchesPage />} />

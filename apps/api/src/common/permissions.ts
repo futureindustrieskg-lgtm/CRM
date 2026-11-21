@@ -28,6 +28,7 @@ export const SPECIAL_PERMISSIONS = [
   { code: 'finance.delete_records', name: 'Удаление финансовых записей' },
   { code: 'finance.salaries', name: 'Доступ к зарплатам' },
   { code: 'students.contacts', name: 'Видеть контакты студентов' },
+  { code: 'schedule.read_all', name: 'Видеть всё расписание и все группы (не только свои)' },
 ] as const;
 
 export const ALL = '*';
@@ -56,6 +57,7 @@ export const DEFAULT_ROLES: {
       ...crud('students'),
       'students.contacts',
       ...crud('schedule'),
+      'schedule.read_all',
       ...crud('groups'),
       ...crud('attendance'),
       ...crud('finance', ['read', 'create', 'update', 'export']),
@@ -75,6 +77,7 @@ export const DEFAULT_ROLES: {
       ...crud('students', ['read', 'create', 'update']),
       'students.contacts',
       'schedule.read',
+      'schedule.read_all',
       'groups.read',
       'finance.read',
       'finance.create',

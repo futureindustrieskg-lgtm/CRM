@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from 'react';
 import { useI18n } from './i18n';
+import { timezone, zTime } from './tz';
 
 export const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 export const GOALS = ['exam', 'work', 'study', 'family', 'other'];
@@ -9,6 +10,7 @@ export const STATUSES = ['active', 'paused', 'finished', 'left'];
 export function fmtDate(d?: string | null, withTime = true) {
   if (!d) return '—';
   return new Date(d).toLocaleString('ru-RU', {
+    timeZone: timezone(),
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -104,5 +106,46 @@ export function EnumSelect({
 
 export function ErrorText({ error }: { error: unknown }) {
   if (!error) return null;
+  const conflicts = (error as { data?: { conflicts?: Conflict[] } }).data?.conflicts;
+  if (conflicts?.length) return <ConflictList conflicts={conflicts} />;
   return <div className="error">{error instanceof Error ? error.message : String(error)}</div>;
+}
+
+export interface Conflict {
+  type: 'teacher' | 'room' | 'student';
+  at: string;
+  lessonId: string;
+  groupId: string;
+  groupName: string;
+  startsAt: string;
+  endsAt: string;
+  detail: string;
+}
+
+export function fmtTime(d: string | Date) {
+  return zTime(d);
+}
+
+/** Список конфликтов расписания: кто занят, в какой группе и когда. */
+export function ConflictList({ conflicts }: { conflicts: Conflict[] }) {
+  const { t } = useI18n();
+  const shown = conflicts.slice(0, 12);
+  return (
+    <div className="conflicts">
+      <b>
+        {t('conflicts')}: {conflicts.length}
+      </b>
+      <ul>
+        {shown.map((c, i) => (
+          <li key={i}>
+            <span className={`badge cf-${c.type}`}>{t(`cf.${c.type}`)}</span> {fmtDate(c.at)} — {c.detail} ·{' '}
+            <span className="muted">
+              «{c.groupName}» {fmtTime(c.startsAt)}–{fmtTime(c.endsAt)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {conflicts.length > shown.length && <div className="muted">… +{conflicts.length - shown.length}</div>}
+    </div>
+  );
 }

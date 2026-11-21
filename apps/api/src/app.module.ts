@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth';
 import { AuthGuard } from './common/auth.guard';
 import { LeadsModule } from './leads/leads.module';
 import { PrismaModule } from './prisma/prisma.service';
+import { ScheduleModule } from './schedule/schedule.module';
 import { StudentsModule } from './students/students.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { StudentsModule } from './students/students.module';
     AdminModule,
     LeadsModule,
     StudentsModule,
+    ScheduleModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
