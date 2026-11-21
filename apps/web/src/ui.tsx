@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { useI18n } from './i18n';
 import { timezone, zTime } from './tz';
 
@@ -29,12 +29,25 @@ export function fmtPhone(p?: string | null) {
   return m ? `+996 ${m[1]} ${m[2]} ${m[3]}` : p;
 }
 
+/** Стек открытых окон: Escape закрывает только верхнее (окно поверх карточки и т. п.). */
+const escStack: { current: () => void }[] = [];
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && escStack.length) escStack[escStack.length - 1].current();
+  });
+}
+
 function useEsc(onClose: () => void) {
+  const ref = useRef(onClose);
+  ref.current = onClose;
   useEffect(() => {
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
+    const entry = ref;
+    escStack.push(entry);
+    return () => {
+      const i = escStack.lastIndexOf(entry);
+      if (i >= 0) escStack.splice(i, 1);
+    };
+  }, []);
 }
 
 export function Drawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {

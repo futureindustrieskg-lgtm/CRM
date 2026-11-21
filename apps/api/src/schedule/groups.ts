@@ -31,6 +31,7 @@ import {
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
 import { hasPermission } from '../common/permissions';
+import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictService } from './conflicts';
 import { generateSlots, hoursPerLesson, localDate, ScheduleRule, validateRule, zonedToUtc } from './time';
@@ -222,7 +223,12 @@ const ACTIVE = { leftAt: null, waitlist: false } as const;
 @ApiBearerAuth()
 @Controller('groups')
 export class GroupsController {
-  constructor(private prisma: PrismaService, private audit: AuditService, private conflicts: ConflictService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private conflicts: ConflictService,
+    private finance: FinanceService,
+  ) {}
 
   @Get()
   @RequirePermissions('groups.read')
@@ -510,17 +516,19 @@ export class GroupsController {
       data: { leftAt: new Date() },
     });
     const res = await this.enroll(ctx, to, studentId, false);
+    // Перерасчёт остатка абонемента: неиспользованные деньги переходят в абонемент новой группы.
+    const recalculated = await this.finance.transfer(studentId, id, to, ctx.userId);
     await this.audit.log({
       userId: ctx.userId,
       entity: 'student',
       entityId: studentId,
       action: 'transfer',
       before: { groupId: id, groupName: from.name },
-      after: { groupId: to.id, groupName: to.name, waitlist: res.waitlist },
+      after: { groupId: to.id, groupName: to.name, waitlist: res.waitlist, subscriptions: recalculated },
       reason: dto.reason,
     });
     if (!gs.waitlist) await this.promoteWaitlist(ctx, from);
-    return res;
+    return { ...res, subscriptions: recalculated };
   }
 
   /** Массовый перевод группы на следующий уровень: новая группа с тем же составом, шаблоном и преподавателем. */

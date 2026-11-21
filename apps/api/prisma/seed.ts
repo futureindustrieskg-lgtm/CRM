@@ -15,6 +15,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { DEFAULT_ROLES } from '../src/common/permissions';
+import { FinanceService } from '../src/finance/finance.service';
 import { generateSlots, localDate } from '../src/schedule/time';
 
 const prisma = new PrismaClient();
@@ -88,6 +89,8 @@ async function main() {
     { roleId: role.branch_admin, branchId: south.id },
   ]);
   const teacher2 = await mk('teacher2@crm.test', 'Thomas', 'Weber', [{ roleId: role.teacher, branchId: center.id }]);
+  // Оплата преподавателей: Anna — опытная (50 %), Thomas — новый (30 %).
+  await prisma.user.update({ where: { id: teacher.id }, data: { teacherCategory: 'experienced' } });
   await mk('accountant@crm.test', 'Гульнара', 'Счётова', [{ roleId: role.accountant }]);
 
   // Лиды
@@ -182,38 +185,65 @@ async function main() {
     },
   });
 
-  const students: [string, string, string, string, number][] = [
-    ['Асель', 'Жумабаева', 'A1', 'active', 0],
-    ['Руслан', 'Бекмуратов', 'A1', 'active', -4500],
-    ['Канышай', 'Абдиева', 'A2', 'paused', 0],
-    ['Евгений', 'Петров', 'B1', 'active', 2000],
-    ['Нургуль', 'Исакова', 'B1', 'active', -9000],
-    ['Самат', 'Турдубаев', 'A2', 'finished', 0],
+  // Прайс-лист.
+  const tA1Level = await prisma.tariff.create({ data: { courseId: a1.id, name: 'A1.1 — весь уровень', type: 'level', lessons: 24, price: 9000 } });
+  await prisma.tariff.create({ data: { courseId: a1.id, name: 'A1.1 — месяц (12 занятий)', type: 'month', lessons: 12, price: 4800 } });
+  await prisma.tariff.create({ data: { courseId: a1.id, name: 'A1.1 — рассрочка на 3 платежа', type: 'installment', lessons: 24, price: 9600, installments: 3 } });
+  const tB1Level = await prisma.tariff.create({ data: { courseId: b1.id, name: 'Goethe B1 — весь курс', type: 'level', lessons: 32, price: 14000 } });
+  await prisma.tariff.create({ data: { courseId: b1.id, name: 'Goethe B1 — пакет 8 занятий', type: 'package', lessons: 8, price: 4000 } });
+
+  // Студенты: абонемент на уровень и оплаты. Баланс считается сервисом: оплаты − стоимость абонементов.
+  const students: [string, string, string, string, number, number?][] = [
+    ['Асель', 'Жумабаева', 'A1', 'active', 9000],
+    ['Руслан', 'Бекмуратов', 'A1', 'active', 4500],
+    ['Канышай', 'Абдиева', 'A2', 'paused', 8100, 10],
+    ['Евгений', 'Петров', 'B1', 'active', 16000],
+    ['Нургуль', 'Исакова', 'B1', 'active', 5000],
+    ['Самат', 'Турдубаев', 'A2', 'finished', 9000],
   ];
-  for (const [i, [firstName, lastName, level, status, balance]] of students.entries()) {
+  const finance = new FinanceService(prisma as any);
+  const studentIds: string[] = [];
+  for (const [i, [firstName, lastName, level, status, paid, discount]] of students.entries()) {
     const isSouth = level === 'B1';
     const s = await prisma.student.create({
       data: {
         firstName,
         lastName,
-        phone: `99670010${String(i).padStart(4, '0')}`,
+        phone: '99670010' + String(i).padStart(4, '0'),
         currentLevel: level,
         targetLevel: 'B2',
         goal: ['exam', 'work', 'study', 'family'][i % 4],
         status,
-        balance,
         branchId: isSouth ? south.id : center.id,
         consentAt: new Date(),
       },
     });
+    studentIds.push(s.id);
+    const group = isSouth ? g2 : g1;
     await prisma.groupStudent.create({
-      data: { groupId: isSouth ? g2.id : g1.id, studentId: s.id, joinedAt: isSouth ? undefined : new Date(g1Start) },
+      data: { groupId: group.id, studentId: s.id, joinedAt: isSouth ? undefined : new Date(g1Start) },
     });
-    if (balance >= 0 && status === 'active') {
-      await prisma.payment.create({
-        data: { branchId: s.branchId, studentId: s.id, amount: isSouth ? 14000 : 9000, method: i % 2 ? 'cash' : 'qr' },
-      });
-    }
+    const tariff = isSouth ? tB1Level : tA1Level;
+    const base = Number(tariff.price);
+    const sub = await prisma.subscription.create({
+      data: {
+        studentId: s.id,
+        branchId: s.branchId,
+        courseId: group.courseId,
+        groupId: group.id,
+        tariffId: tariff.id,
+        type: tariff.type,
+        lessonsTotal: tariff.lessons,
+        basePrice: base,
+        discountPercent: discount ?? 0,
+        discountType: discount ? 'family' : null,
+        price: base * (1 - (discount ?? 0) / 100),
+        startDate: isSouth ? new Date() : new Date(g1Start),
+      },
+    });
+    await prisma.payment.create({
+      data: { branchId: s.branchId, studentId: s.id, subscriptionId: sub.id, amount: paid, method: i % 2 ? 'cash' : 'qr', paidAt: isSouth ? new Date() : new Date(g1Start) },
+    });
   }
 
   // Учебный план A1.1 (Menschen A1.1): 24 урока по 2 ак. часа.
@@ -269,6 +299,13 @@ async function main() {
       }
     }
     await prisma.lesson.update({ where: { id: l.id }, data: { status: 'done', courseTopicId: topics[i]?.id } });
+  }
+
+  // Списание отмеченных занятий с абонементов и пересчёт балансов.
+  for (const id of studentIds) {
+    const gs = await prisma.groupStudent.findMany({ where: { studentId: id }, select: { groupId: true } });
+    for (const g of gs) await finance.allocate(id, g.groupId);
+    await finance.recalcBalance(id);
   }
 
   console.log('Демо-данные созданы.');

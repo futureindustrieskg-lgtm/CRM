@@ -26,6 +26,7 @@ import {
 } from 'class-validator';
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
+import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { canSeeAll } from '../schedule/groups';
 import {
@@ -117,7 +118,12 @@ function membersAt(groupId: string, startsAt: Date, endsAt: Date): Prisma.GroupS
 @ApiBearerAuth()
 @Controller('lessons')
 export class JournalController {
-  constructor(private prisma: PrismaService, private audit: AuditService, private settings: SettingsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private settings: SettingsService,
+    private finance: FinanceService,
+  ) {}
 
   @Get(':id/journal')
   @RequirePermissions('attendance.read')
@@ -210,6 +216,11 @@ export class JournalController {
         },
       });
     });
+
+    // Списание с абонементов (ТЗ 3.5, 3.7): распределяем отметки по абонементам и пересчитываем баланс.
+    for (const item of dto.items) {
+      await this.finance.allocate(item.studentId, lesson.groupId);
+    }
 
     const after = await this.prisma.attendance.findMany({ where: { lessonId: id } });
     await this.audit.log({

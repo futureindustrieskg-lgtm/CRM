@@ -19,6 +19,7 @@ import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/
 import { hasPermission } from '../common/permissions';
 import { GOALS, LEVELS } from '../leads/leads.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CENTER_TZ, localDate, zonedToUtc } from '../schedule/time';
 
 export const STUDENT_STATUSES = ['active', 'paused', 'finished', 'left'] as const;
 
@@ -213,9 +214,10 @@ export class DashboardController {
   @Get()
   async summary(@Ctx() ctx: RequestContext, @Query('branchId') branchId?: string) {
     const scope = branchScope(ctx, branchId);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    // «Сегодня» и «этот месяц» — по часовому поясу центра, а не сервера.
+    const localToday = localDate(new Date(), CENTER_TZ);
+    const today = zonedToUtc(localToday, '00:00', CENTER_TZ);
+    const monthStart = zonedToUtc(localToday.slice(0, 8) + '01', '00:00', CENTER_TZ);
     const canLeads = hasPermission(ctx.permissions, 'leads.read');
     const canStudents = hasPermission(ctx.permissions, 'students.read');
     const canFinance = hasPermission(ctx.permissions, 'finance.read');

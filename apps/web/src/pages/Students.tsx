@@ -17,6 +17,7 @@ import {
   Modal,
   STATUSES,
 } from '../ui';
+import { StudentFinance } from './Finance';
 import { StudentProgress } from './Journal';
 import { useBranches } from './Leads';
 
@@ -39,7 +40,7 @@ interface Student {
 
 interface StudentFull extends Student {
   parents: { isPayer: boolean; parent: { id: string; firstName: string; lastName: string; phone: string | null } }[];
-  groups: { joinedAt: string; leftAt: string | null; group: { id: string; name: string; status: string; course: { name: string } } }[];
+  groups: { joinedAt: string; leftAt: string | null; group: { id: string; name: string; status: string; course: { id: string; name: string } } }[];
   payments: { id: string; amount: string; method: string; paidAt: string }[];
   lead: { id: string; source: string; utmSource: string | null; utmCampaign: string | null; createdAt: string } | null;
 }
@@ -338,6 +339,7 @@ function StudentDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             <p className="muted">{t('noData')}</p>
           )}
 
+          <StudentFinance student={s} />
           <h3>{t('payments')}</h3>
           {s.payments.length ? (
             <table>
@@ -346,7 +348,7 @@ function StudentDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                   <tr key={p.id}>
                     <td>{fmtDate(p.paidAt)}</td>
                     <td>{fmtMoney(p.amount)}</td>
-                    <td className="muted">{p.method}</td>
+                    <td className="muted">{t(`pm.${p.method}`)}</td>
                   </tr>
                 ))}
               </tbody>

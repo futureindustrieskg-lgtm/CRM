@@ -5,7 +5,9 @@ import { LOCALES, Locale, useI18n } from './i18n';
 import { AuditPage, BranchesPage, RolesPage, UsersPage } from './pages/Admin';
 import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
+import { FinancePage } from './pages/Finance';
 import { GroupsPage } from './pages/Groups';
+import { PayrollPage } from './pages/Payroll';
 import { LearningSettingsPage, TodayPage } from './pages/Journal';
 import { LeadsPage, useBranches } from './pages/Leads';
 import { setTimezone } from './tz';
@@ -95,6 +97,8 @@ function Layout() {
     { to: '/schedule', label: t('schedule'), show: can('schedule.read') },
     { to: '/groups', label: t('groups'), show: can('groups.read') },
     { to: '/courses', label: t('courses'), show: can('groups.read') },
+    { to: '/finance', label: t('finance'), show: can('finance.read') },
+    { to: '/payroll', label: can('finance.salaries') ? t('payroll') : t('myPayroll'), show: can('finance.salaries') || can('attendance.create') },
   ];
   const admin = [
     { to: '/users', label: t('users'), show: can('users.read') },
@@ -162,6 +166,8 @@ function Layout() {
             <Route path="/students" element={<StudentsPage />} />
             <Route path="/students/:id" element={<StudentsPage />} />
             <Route path="/today" element={<TodayPage />} />
+            <Route path="/finance" element={<FinancePage />} />
+            <Route path="/payroll" element={<PayrollPage />} />
             <Route path="/learning-rules" element={<LearningSettingsPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/groups" element={<GroupsPage />} />

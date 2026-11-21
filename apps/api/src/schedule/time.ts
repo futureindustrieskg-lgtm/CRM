@@ -3,6 +3,9 @@
  * (Branch.timezone), уроки хранятся в UTC.
  */
 
+/** Часовой пояс центра по умолчанию — для отчётов «за месяц» и «за сегодня». */
+export const CENTER_TZ = 'Asia/Bishkek';
+
 /** Академический час, минут. */
 export const ACADEMIC_HOUR_MIN = 45;
 
