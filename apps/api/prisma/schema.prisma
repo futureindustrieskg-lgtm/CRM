@@ -167,12 +167,13 @@ model Lead {
   updatedAt      DateTime  @updatedAt
   mergedIntoId   String?
 
-  branch     Branch?        @relation(fields: [branchId], references: [id])
-  stage      PipelineStage  @relation(fields: [stageId], references: [id])
-  manager    User?          @relation("LeadManager", fields: [managerId], references: [id])
-  activities LeadActivity[]
-  tasks      Task[]
-  student    Student?
+  branch       Branch?        @relation(fields: [branchId], references: [id])
+  stage        PipelineStage  @relation(fields: [stageId], references: [id])
+  manager      User?          @relation("LeadManager", fields: [managerId], references: [id])
+  activities   LeadActivity[]
+  tasks        Task[]
+  testAttempts TestAttempt[]
+  student      Student?
 
   @@index([phone])
   @@index([email])
@@ -238,6 +239,8 @@ model Student {
   payments      Payment[]
   submissions   HomeworkSubmission[]
   subscriptions Subscription[]
+  homework      Homework[]           @relation("HomeworkStudent")
+  testAttempts  TestAttempt[]
 
   @@index([branchId, status])
 }
@@ -369,17 +372,19 @@ model Attendance {
 
 /// Оценка по навыкам Goethe: Hören, Lesen, Schreiben, Sprechen.
 model Grade {
-  id          String   @id @default(uuid())
-  studentId   String
-  lessonId    String?
-  skill       String // hoeren | lesen | schreiben | sprechen | overall
-  value       Decimal  @db.Decimal(6, 2)
-  scale       String   @default("percent") // points | percent | de_1_6
+  id           String   @id @default(uuid())
+  studentId    String
+  lessonId     String?
+  skill        String // hoeren | lesen | schreiben | sprechen | overall
+  value        Decimal  @db.Decimal(6, 2)
+  scale        String   @default("percent") // points | percent | de_1_6
   /// Максимум для шкалы points (например, 100 баллов за модуль Goethe).
-  maxValue    Decimal? @db.Decimal(6, 2)
-  comment     String?
-  createdById String?
-  createdAt   DateTime @default(now())
+  maxValue     Decimal? @db.Decimal(6, 2)
+  comment      String?
+  createdById  String?
+  /// Оценка за ДЗ — засчитывается в навык задания.
+  submissionId String?  @unique
+  createdAt    DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   lesson  Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
@@ -417,34 +422,141 @@ model Notification {
 
 // ───────────── 3.6 Домашние задания ─────────────
 
+/// Домашнее задание группе или отдельному студенту группы (ТЗ 3.6).
 model Homework {
   id          String    @id @default(uuid())
   groupId     String
+  /// Индивидуальное ДЗ одному студенту; null — всей группе.
+  studentId   String?
   title       String
   description String?
-  attachments Json?
+  /// Ссылки: [{ url, title }]
+  links       Json?
+  /// Навык, в который засчитывается оценка: hoeren | lesen | schreiben | sprechen | overall.
+  skill       String?
+  /// ДЗ-тест: проверяется автоматически.
+  testId      String?
   dueAt       DateTime?
+  createdById String?
   createdAt   DateTime  @default(now())
 
   group       Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student     Student?             @relation("HomeworkStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  test        Test?                @relation(fields: [testId], references: [id], onDelete: SetNull)
   submissions HomeworkSubmission[]
+  files       StoredFile[]         @relation("HomeworkFiles")
 }
 
 model HomeworkSubmission {
-  id          String    @id @default(uuid())
-  homeworkId  String
-  studentId   String
-  text        String?
-  attachments Json?
-  submittedAt DateTime  @default(now())
-  grade       Decimal?  @db.Decimal(6, 2)
-  feedback    String?
-  checkedAt   DateTime?
+  id            String    @id @default(uuid())
+  homeworkId    String
+  studentId     String
+  text          String?
+  /// Длительность аудиоответа в секундах (Sprechen — до 5 минут).
+  audioSeconds  Int?
+  submittedAt   DateTime  @default(now())
+  status        String    @default("submitted") // submitted | checked | returned
+  grade         Decimal?  @db.Decimal(6, 2)
+  feedback      String?
+  checkedAt     DateTime?
+  checkedById   String?
+  testAttemptId String?   @unique
 
-  homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
-  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  homework    Homework     @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  testAttempt TestAttempt? @relation(fields: [testAttemptId], references: [id], onDelete: SetNull)
+  files       StoredFile[] @relation("SubmissionFiles")
 
   @@unique([homeworkId, studentId])
+}
+
+/// Загруженный файл (фото, документ, аудио). Хранится на диске сервера, доступ — через API с проверкой прав.
+model StoredFile {
+  id           String   @id @default(uuid())
+  ownerId      String?
+  name         String
+  mime         String
+  size         Int
+  path         String
+  /// Голосовой или файловый ответ преподавателя к сдаче.
+  isFeedback   Boolean  @default(false)
+  homeworkId   String?
+  submissionId String?
+  questionId   String?
+  createdAt    DateTime @default(now())
+
+  homework   Homework?           @relation("HomeworkFiles", fields: [homeworkId], references: [id], onDelete: SetNull)
+  submission HomeworkSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id], onDelete: SetNull)
+  question   TestQuestion?       @relation(fields: [questionId], references: [id], onDelete: SetNull)
+}
+
+// ───────────── 3.6 Тесты ─────────────
+
+/// Тест: обычный (ДЗ, контрольная) или входной тест уровня (placement) для лидов по ссылке.
+model Test {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  kind         String   @default("quiz") // quiz | placement
+  level        String?
+  timeLimitMin Int?
+  isPublished  Boolean  @default(false)
+  /// Общая ссылка входного теста: /test/<publicToken>
+  publicToken  String?  @unique
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  questions TestQuestion[]
+  attempts  TestAttempt[]
+  homework  Homework[]
+}
+
+model TestQuestion {
+  id     String  @id @default(uuid())
+  testId String
+  sort   Int
+  /// choice | article | matching | text
+  type   String
+  prompt String
+  /// Уровень вопроса для входного теста (A1…C1).
+  level  String?
+  points Int     @default(1)
+  /// Варианты и правильные ответы; формат зависит от type (см. tests.ts).
+  data   Json
+
+  test  Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  files StoredFile[]
+
+  @@index([testId, sort])
+}
+
+/// Попытка прохождения теста: студентом (ДЗ) или лидом (входной тест по ссылке).
+model TestAttempt {
+  id         String    @id @default(uuid())
+  testId     String
+  /// Личная ссылка на попытку: /test/a/<token>
+  token      String    @unique
+  studentId  String?
+  leadId     String?
+  homeworkId String?
+  guestName  String?
+  startedAt  DateTime?
+  deadlineAt DateTime?
+  finishedAt DateTime?
+  timedOut   Boolean   @default(false)
+  answers    Json?
+  score      Decimal?  @db.Decimal(8, 2)
+  maxScore   Decimal?  @db.Decimal(8, 2)
+  percent    Decimal?  @db.Decimal(5, 2)
+  /// Результат входного теста.
+  level      String?
+  createdAt  DateTime  @default(now())
+
+  test       Test                @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student    Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lead       Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  submission HomeworkSubmission?
 }
 
 // ───────────── 3.7 Финансы ─────────────

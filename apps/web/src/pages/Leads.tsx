@@ -16,6 +16,7 @@ import {
   Modal,
   SOURCES,
 } from '../ui';
+import { PlacementLinkButton } from './Tests';
 
 export interface Stage {
   id: string;
@@ -469,6 +470,7 @@ function LeadDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 </a>
               </>
             )}
+            {canEdit && <PlacementLinkButton leadId={id} />}
             {l.student ? (
               <button onClick={() => nav(`/students/${l.student!.id}`)}>→ {t('students')}</button>
             ) : (

@@ -11,6 +11,8 @@
  *   teacher2@crm.test   — преподаватель, филиал «Центр»
  *   accountant@crm.test — бухгалтер
  *   parent@crm.test     — родитель студента Руслана Бекмуратова
+ *   asel@crm.test       — студентка Асель Жумабаева (кабинет студента: задания, тесты)
+ *   Входной тест по общей ссылке: /test/demo-einstufung
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -300,6 +302,86 @@ async function main() {
     }
     await prisma.lesson.update({ where: { id: l.id }, data: { status: 'done', courseTopicId: topics[i]?.id } });
   }
+
+  // ───── Домашние задания и тесты ─────
+  // Студентка Асель получает доступ в кабинет.
+  const asel = await prisma.student.findFirstOrThrow({ where: { lastName: 'Жумабаева' } });
+  const aselUser = await mk('asel@crm.test', 'Асель', 'Жумабаева', [{ roleId: role.student, branchId: center.id }]);
+  await prisma.student.update({ where: { id: asel.id }, data: { userId: aselUser.id } });
+
+  const day = 86_400_000;
+  const hw1 = await prisma.homework.create({
+    data: {
+      groupId: g1.id,
+      title: 'Lektion 5: Arbeitsbuch S. 34–35',
+      description: 'Упражнения 1–4. Напишите 5 предложений с unbestimmter Artikel (ein/eine).',
+      skill: 'schreiben',
+      links: [{ url: 'https://learngerman.dw.com', title: 'DW: Nicos Weg A1' }],
+      dueAt: new Date(Date.now() + 3 * day),
+      createdById: teacher2.id,
+    },
+  });
+  await prisma.homeworkSubmission.create({
+    data: { homeworkId: hw1.id, studentId: asel.id, text: 'Das ist ein Tisch. Das ist eine Lampe. Das ist ein Buch. Das ist eine Tasche. Das ist ein Stuhl.' },
+  });
+  await prisma.homework.create({
+    data: {
+      groupId: g1.id,
+      title: 'Sprechen: Meine Familie',
+      description: 'Запишите аудио (1–2 минуты): расскажите о своей семье. Используйте mein/meine.',
+      skill: 'sprechen',
+      dueAt: new Date(Date.now() + 5 * day),
+      createdById: teacher2.id,
+    },
+  });
+
+  const quiz = await prisma.test.create({
+    data: { title: 'Artikel-Test: Lektion 4', kind: 'quiz', level: 'A1', timeLimitMin: 10, isPublished: true, createdById: teacher2.id },
+  });
+  const qz: [string, string, unknown, number?][] = [
+    ['article', 'Выберите артикль', { noun: 'Tisch', correct: 'der' }],
+    ['article', 'Выберите артикль', { noun: 'Lampe', correct: 'die' }],
+    ['article', 'Выберите артикль', { noun: 'Sofa', correct: 'das' }],
+    ['choice', 'Wie heißt das auf Deutsch: «стул»?', { options: ['der Stuhl', 'die Stuhl', 'das Stuhl'], correct: [0] }],
+    ['matching', 'Сопоставьте слова', { pairs: [{ left: 'der Schrank', right: 'шкаф' }, { left: 'das Bett', right: 'кровать' }, { left: 'die Uhr', right: 'часы' }] }, 3],
+    ['text', 'Впишите артикль: ___ Teppich ist schön.', { answers: ['der', 'Der'] }],
+  ];
+  await prisma.testQuestion.createMany({
+    data: qz.map(([type, prompt, data, points], i) => ({ testId: quiz.id, sort: i + 1, type, prompt, data: data as any, points: points ?? 1 })),
+  });
+  await prisma.homework.create({
+    data: { groupId: g1.id, title: 'Тест: артикли (Lektion 4)', testId: quiz.id, skill: 'lesen', dueAt: new Date(Date.now() + 2 * day), createdById: teacher2.id },
+  });
+
+  // Входной тест уровня для лидов: вопросы A1–B2, уровень засчитывается при 60 %.
+  const placement = await prisma.test.create({
+    data: {
+      title: 'Einstufungstest Deutsch',
+      description: 'Бесплатный тест уровня немецкого: 12 вопросов, 15 минут. Результат придёт менеджеру центра.',
+      kind: 'placement',
+      timeLimitMin: 15,
+      isPublished: true,
+      publicToken: 'demo-einstufung',
+      createdById: teacher.id,
+    },
+  });
+  const pq: [string, string, string, unknown][] = [
+    ['A1', 'choice', 'Ich ___ Anna.', { options: ['bin', 'bist', 'ist'], correct: [0] }],
+    ['A1', 'article', 'Выберите артикль', { noun: 'Mutter', correct: 'die' }],
+    ['A1', 'choice', 'Wie alt ___ du?', { options: ['bist', 'bin', 'sind'], correct: [0] }],
+    ['A2', 'choice', 'Gestern ___ ich ins Kino gegangen.', { options: ['habe', 'bin', 'war'], correct: [1] }],
+    ['A2', 'text', 'Ich fahre ___ dem Bus. (впишите предлог)', { answers: ['mit'] }],
+    ['A2', 'choice', 'Das Wetter ist heute ___ als gestern.', { options: ['gut', 'besser', 'am besten'], correct: [1] }],
+    ['B1', 'choice', 'Ich weiß nicht, ___ er morgen kommt.', { options: ['dass', 'ob', 'wenn'], correct: [1] }],
+    ['B1', 'choice', 'Das ist der Mann, ___ ich geholfen habe.', { options: ['den', 'dem', 'der'], correct: [1] }],
+    ['B1', 'text', 'Wenn ich Zeit ___, würde ich reisen. (haben, Konjunktiv II)', { answers: ['hätte'] }],
+    ['B2', 'choice', 'Das Projekt ___ bis Freitag abgeschlossen sein.', { options: ['muss', 'müsste', 'soll'], correct: [0, 1] }],
+    ['B2', 'choice', '___ der Verspätung erreichten wir den Zug.', { options: ['Trotz', 'Wegen', 'Während'], correct: [0] }],
+    ['B2', 'text', 'Er tat so, als ___ er nichts gehört. (haben)', { answers: ['hätte'] }],
+  ];
+  await prisma.testQuestion.createMany({
+    data: pq.map(([level, type, prompt, data], i) => ({ testId: placement.id, sort: i + 1, level, type, prompt, data: data as any })),
+  });
 
   // Списание отмеченных занятий с абонементов и пересчёт балансов.
   for (const id of studentIds) {

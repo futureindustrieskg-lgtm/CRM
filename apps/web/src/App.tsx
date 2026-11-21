@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import { LOCALES, Locale, useI18n } from './i18n';
 import { AuditPage, BranchesPage, RolesPage, UsersPage } from './pages/Admin';
@@ -7,6 +7,10 @@ import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
 import { FinancePage } from './pages/Finance';
 import { GroupsPage } from './pages/Groups';
+import { HomeworkPage } from './pages/Homework';
+import { MyHomeworkPage } from './pages/MyHomework';
+import { PublicAttemptPage, PublicTestPage } from './pages/TestRun';
+import { TestsPage } from './pages/Tests';
 import { PayrollPage } from './pages/Payroll';
 import { LearningSettingsPage, TodayPage } from './pages/Journal';
 import { LeadsPage, useBranches } from './pages/Leads';
@@ -18,6 +22,10 @@ import { ErrorText } from './ui';
 
 export function App() {
   const { me, loading } = useAuth();
+  const loc = useLocation();
+  // Тест по ссылке проходят без входа (лиды, гости).
+  if (loc.pathname.startsWith('/test/a/')) return <Routes><Route path="/test/a/:token" element={<PublicAttemptPage />} /></Routes>;
+  if (loc.pathname.startsWith('/test/')) return <Routes><Route path="/test/:token" element={<PublicTestPage />} /></Routes>;
   if (loading) return <div className="login-page muted">…</div>;
   if (!me) return <LoginPage />;
   return <Layout />;
@@ -89,12 +97,15 @@ function Layout() {
   setTimezone((branches.data?.find((b) => b.id === activeRole?.branchId) ?? branches.data?.[0])?.timezone);
 
   const nav = [
-    { to: '/', label: t('dashboard'), show: true },
+    { to: '/', label: t('dashboard'), show: activeRole?.code !== 'student' },
     { to: '/leads', label: t('leads'), show: can('leads.read') },
     { to: '/tasks', label: t('tasks'), show: can('leads.read') },
     { to: '/students', label: t('students'), show: can('students.read') },
     { to: '/today', label: t('myLessons'), show: can('attendance.create') },
+    { to: '/my/homework', label: t('myHomework'), show: activeRole?.code === 'student' },
     { to: '/schedule', label: t('schedule'), show: can('schedule.read') },
+    { to: '/homework', label: t('homework'), show: can('homework.create') },
+    { to: '/tests', label: t('testsTitle'), show: can('homework.create') },
     { to: '/groups', label: t('groups'), show: can('groups.read') },
     { to: '/courses', label: t('courses'), show: can('groups.read') },
     { to: '/finance', label: t('finance'), show: can('finance.read') },
@@ -159,7 +170,12 @@ function Layout() {
         </header>
         <main className="content">
           <Routes>
-            <Route path="/" element={<DashboardPage />} />
+            <Route path="/" element={activeRole?.code === 'student' ? <Navigate to="/my/homework" /> : <DashboardPage />} />
+            <Route path="/my/homework" element={<MyHomeworkPage />} />
+            <Route path="/homework" element={<HomeworkPage />} />
+            <Route path="/homework/:id" element={<HomeworkPage />} />
+            <Route path="/tests" element={<TestsPage />} />
+            <Route path="/tests/:id" element={<TestsPage />} />
             <Route path="/leads" element={<LeadsPage />} />
             <Route path="/leads/:id" element={<LeadsPage />} />
             <Route path="/tasks" element={<TasksPage />} />

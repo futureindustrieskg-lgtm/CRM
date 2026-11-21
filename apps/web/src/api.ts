@@ -85,6 +85,39 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   return res.json();
 }
 
+export interface FileRef {
+  id: string;
+  name: string;
+  mime: string;
+  size?: number;
+  isFeedback?: boolean;
+}
+
+/** Загрузка файла (multipart); возвращает ссылку для прикрепления к ДЗ, сдаче или вопросу. */
+export async function uploadFile(file: Blob, name: string, retry = true): Promise<FileRef> {
+  const fd = new FormData();
+  fd.append('file', file, name);
+  const headers: Record<string, string> = {};
+  if (memory?.accessToken) headers.Authorization = `Bearer ${memory.accessToken}`;
+  if (memory?.activeRoleId) headers['X-Active-Role'] = memory.activeRoleId;
+  const res = await fetch('/api/v1/files', { method: 'POST', headers, body: fd });
+  if (res.status === 401 && retry && (await tryRefresh())) return uploadFile(file, name, false);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.message ?? res.statusText, data);
+  return data;
+}
+
+/** Файл с авторизацией → временная ссылка (object URL) для <img>, <audio>, скачивания. */
+export async function fileBlobUrl(id: string, retry = true): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (memory?.accessToken) headers.Authorization = `Bearer ${memory.accessToken}`;
+  if (memory?.activeRoleId) headers['X-Active-Role'] = memory.activeRoleId;
+  const res = await fetch(`/api/v1/files/${id}`, { headers });
+  if (res.status === 401 && retry && (await tryRefresh())) return fileBlobUrl(id, false);
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return URL.createObjectURL(await res.blob());
+}
+
 export function qs(params: Record<string, string | undefined | null>) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) p.set(k, v);

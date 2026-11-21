@@ -245,3 +245,34 @@ tr.click:hover td { background: var(--surface-2); }
 .lesson-card .grow { flex: 1; min-width: 0; }
 .payroll-students { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 16px; font-size: 12px; margin-top: 4px; }
 .toolbar input[type="checkbox"] { min-width: 0; width: auto; }
+
+/* Files */
+.file-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.file-thumb img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); display: block; }
+.file-audio { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.file-audio audio { height: 36px; max-width: 280px; }
+
+/* Homework */
+.hw-status { font-size: 12px; }
+.hw-status.submitted { color: var(--primary); border-color: var(--primary); }
+.hw-status.checked { color: var(--success); border-color: var(--success); }
+.hw-status.returned, .hw-status.overdue { color: var(--warning); border-color: var(--warning); }
+.hw-card { margin-bottom: 12px; }
+.hw-card .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.hw-desc { white-space: pre-wrap; margin: 6px 0; }
+
+/* Tests */
+.q-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; background: var(--surface); }
+.q-card .q-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.choice-opt { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.choice-opt input[type='text'], .choice-opt input:not([type]) { flex: 1; }
+.taker { max-width: 720px; margin: 0 auto; }
+.taker .q { margin-bottom: 18px; }
+.taker .q-prompt { font-weight: 600; margin-bottom: 8px; }
+.opt-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt-btns button { min-height: 44px; min-width: 64px; justify-content: center; }
+.opt-btns button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.timer { position: sticky; top: 0; z-index: 5; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; display: inline-block; font-weight: 700; margin-bottom: 12px; }
+.timer.low { color: var(--danger); border-color: var(--danger); }
+.public-page { min-height: 100%; padding: 24px 16px; }
+.result-big { font-size: 44px; font-weight: 800; color: var(--primary); }

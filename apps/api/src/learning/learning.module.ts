@@ -528,5 +528,6 @@ export class TopicsController {
 @Module({
   controllers: [JournalController, ProgressController, TopicsController, SettingsController],
   providers: [SettingsService],
+  exports: [SettingsService],
 })
 export class LearningModule {}
