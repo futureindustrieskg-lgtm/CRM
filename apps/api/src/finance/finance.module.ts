@@ -32,6 +32,7 @@ import {
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
 import { hasPermission } from '../common/permissions';
+import { fmtSom, NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CENTER_TZ, localDate, zonedToUtc } from '../schedule/time';
 import { FinanceService, PayrollSettings, subscriptionLessonPrice, TEACHER_CATEGORIES } from './finance.service';
@@ -289,7 +290,12 @@ class DeleteDto {
 @ApiBearerAuth()
 @Controller('payments')
 export class PaymentsController {
-  constructor(private prisma: PrismaService, private audit: AuditService, private finance: FinanceService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private finance: FinanceService,
+    private notifications: NotificationsService,
+  ) {}
 
   @Get()
   @RequirePermissions('finance.read')
@@ -346,6 +352,11 @@ export class PaymentsController {
     });
     const balance = await this.finance.recalcBalance(student.id);
     await this.audit.log({ userId: ctx.userId, entity: 'payment', entityId: p.id, action: refund ? 'refund' : 'create', after: p });
+    if (!refund) {
+      // «Оплата получена» студенту и родителю-плательщику (ТЗ 3.8).
+      const rs = await this.notifications.forStudents('payment_received', [student.id]);
+      await this.notifications.emit('payment_received', rs, { amount: fmtSom(dto.amount), balance: fmtSom(balance) }, { dedupe: p.id });
+    }
     return { ...p, balance };
   }
 

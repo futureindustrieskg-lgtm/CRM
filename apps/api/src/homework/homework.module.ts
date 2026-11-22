@@ -34,6 +34,7 @@ import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/
 import { LeadsModule } from '../leads/leads.module';
 import { LearningModule } from '../learning/learning.module';
 import { SettingsService, SKILLS, validateGrade } from '../learning/settings';
+import { NotificationsService, when } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { canSeeAll } from '../schedule/groups';
 import { FilesController, FilesService } from './files';
@@ -104,6 +105,7 @@ export class HomeworkController {
     private audit: AuditService,
     private files: FilesService,
     private settings: SettingsService,
+    private notifications: NotificationsService,
   ) {}
 
   private scope(ctx: RequestContext): Prisma.HomeworkWhereInput {
@@ -176,7 +178,10 @@ export class HomeworkController {
     });
     await this.files.attach(ctx.userId, fileIds, { homeworkId: hw.id });
     await this.audit.log({ userId: ctx.userId, entity: 'homework', entityId: hw.id, action: 'create', after: hw });
-    // Уведомление «новое ДЗ» студентам — итерация 8.
+    // Уведомление «новое ДЗ» (ТЗ 3.8): всей группе или одному студенту.
+    const to = dto.studentId ? [dto.studentId] : (await recipients(this.prisma, { groupId: group.id, studentId: null })).map((s) => s.id);
+    const rs = await this.notifications.forStudents('homework_new', to);
+    await this.notifications.emit('homework_new', rs, { title: hw.title, group: group.name, date: hw.dueAt ? when(hw.dueAt).date + ' ' + when(hw.dueAt).time : '—' }, { dedupe: hw.id });
     return hw;
   }
 
@@ -231,6 +236,18 @@ export class HomeworkController {
       await this.prisma.grade.deleteMany({ where: { submissionId: id } });
     }
     await this.audit.log({ userId: ctx.userId, entity: 'homework_submission', entityId: id, action: dto.status === 'checked' ? 'check' : 'return', before: sub, after });
+    // Уведомление студенту: проверено (с оценкой) или на доработке.
+    const rs = await this.notifications.forStudents('homework_checked', [sub.studentId]);
+    await this.notifications.emit(
+      'homework_checked',
+      rs,
+      {
+        title: sub.homework.title,
+        reason: dto.status === 'checked' ? 'проверено.' : `на доработке: ${dto.feedback ?? ''}`,
+        grade: dto.status === 'checked' && dto.grade != null ? `Оценка: ${dto.grade}` : '',
+      },
+      { dedupe: `${id}:${Date.now()}` },
+    );
     return after;
   }
 }

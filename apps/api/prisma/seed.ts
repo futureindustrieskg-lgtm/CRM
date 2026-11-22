@@ -307,7 +307,21 @@ async function main() {
   // Студентка Асель получает доступ в кабинет.
   const asel = await prisma.student.findFirstOrThrow({ where: { lastName: 'Жумабаева' } });
   const aselUser = await mk('asel@crm.test', 'Асель', 'Жумабаева', [{ roleId: role.student, branchId: center.id }]);
-  await prisma.student.update({ where: { id: asel.id }, data: { userId: aselUser.id } });
+  // У Асель сегодня день рождения — для демонстрации поздравления.
+  const bd = localDate(new Date(), tz);
+  await prisma.student.update({ where: { id: asel.id }, data: { userId: aselUser.id, birthDate: new Date(`2001-${bd.slice(5)}T00:00:00Z`) } });
+  // Чат группы A1.1 с приветствием преподавателя.
+  const chat = await prisma.conversation.create({
+    data: {
+      type: 'group',
+      groupId: g1.id,
+      branchId: center.id,
+      title: g1.name,
+      members: { create: [{ userId: teacher2.id }, { userId: aselUser.id, lastReadAt: new Date(0) }] },
+      messages: { create: { senderId: teacher2.id, text: 'Herzlich willkommen! Здесь можно задавать вопросы по урокам и ДЗ.' } },
+    },
+  });
+  void chat;
 
   const day = 86_400_000;
   const hw1 = await prisma.homework.create({

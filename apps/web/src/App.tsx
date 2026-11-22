@@ -6,7 +6,9 @@ import { AuditPage, BranchesPage, RolesPage, UsersPage } from './pages/Admin';
 import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
 import { FinancePage } from './pages/Finance';
+import { ChatPage, useChatUnread } from './pages/Chat';
 import { GroupsPage } from './pages/Groups';
+import { NotificationBell, NotificationsPage } from './pages/Notifications';
 import { HomeworkPage } from './pages/Homework';
 import { MyHomeworkPage } from './pages/MyHomework';
 import { PublicAttemptPage, PublicTestPage } from './pages/TestRun';
@@ -96,7 +98,8 @@ function Layout() {
   const branches = useBranches();
   setTimezone((branches.data?.find((b) => b.id === activeRole?.branchId) ?? branches.data?.[0])?.timezone);
 
-  const nav = [
+  const chatUnread = useChatUnread(can('messages.read'));
+  const nav: { to: string; label: string; show: boolean; badge?: number }[] = [
     { to: '/', label: t('dashboard'), show: activeRole?.code !== 'student' },
     { to: '/leads', label: t('leads'), show: can('leads.read') },
     { to: '/tasks', label: t('tasks'), show: can('leads.read') },
@@ -106,6 +109,7 @@ function Layout() {
     { to: '/schedule', label: t('schedule'), show: can('schedule.read') },
     { to: '/homework', label: t('homework'), show: can('homework.create') },
     { to: '/tests', label: t('testsTitle'), show: can('homework.create') },
+    { to: '/chat', label: t('chat'), show: can('messages.read'), badge: chatUnread.data?.unread },
     { to: '/groups', label: t('groups'), show: can('groups.read') },
     { to: '/courses', label: t('courses'), show: can('groups.read') },
     { to: '/finance', label: t('finance'), show: can('finance.read') },
@@ -117,6 +121,7 @@ function Layout() {
     { to: '/branches', label: t('branches'), show: can('branches.read') || can('branches.update') },
     { to: '/rooms', label: t('rooms'), show: can('schedule.update') },
     { to: '/learning-rules', label: t('learningRules'), show: can('branches.update') },
+    { to: '/notifications', label: t('notifications'), show: can('messages.update') },
     { to: '/audit', label: t('audit'), show: can('audit.read') },
   ].filter((n) => n.show);
 
@@ -129,6 +134,7 @@ function Layout() {
         {nav.filter((n) => n.show).map((n) => (
           <NavLink key={n.to} to={n.to} end={n.to === '/'}>
             {n.label}
+            {!!n.badge && <span className="count-badge">{n.badge}</span>}
           </NavLink>
         ))}
         {admin.length > 0 && <div className="section">{t('settings')}</div>}
@@ -162,6 +168,7 @@ function Layout() {
               {activeRole?.name} · {activeRole?.branchName ?? t('allBranches')}
             </span>
           )}
+          <NotificationBell />
           <LocaleSwitch />
           <span className="hide-mobile">
             {me!.firstName} {me!.lastName}
@@ -172,6 +179,9 @@ function Layout() {
           <Routes>
             <Route path="/" element={activeRole?.code === 'student' ? <Navigate to="/my/homework" /> : <DashboardPage />} />
             <Route path="/my/homework" element={<MyHomeworkPage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:id" element={<ChatPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/homework" element={<HomeworkPage />} />
             <Route path="/homework/:id" element={<HomeworkPage />} />
             <Route path="/tests" element={<TestsPage />} />

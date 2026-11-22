@@ -53,7 +53,7 @@ export class FilesService {
     if (!fileIds?.length) return;
     const files = await this.prisma.storedFile.findMany({ where: { id: { in: fileIds } } });
     if (files.length !== fileIds.length) throw new BadRequestException('Файл не найден');
-    if (files.some((f) => (!staff && f.ownerId !== ownerId) || f.homeworkId || f.submissionId || (f.questionId && f.questionId !== target.questionId))) {
+    if (files.some((f) => (!staff && f.ownerId !== ownerId) || f.homeworkId || f.submissionId || f.messageId || (f.questionId && f.questionId !== target.questionId))) {
       throw new BadRequestException('Файл уже прикреплён или загружен другим пользователем');
     }
     await this.prisma.storedFile.updateMany({ where: { id: { in: fileIds } }, data: target });
@@ -65,9 +65,15 @@ export class FilesService {
       include: {
         homework: { select: { groupId: true, studentId: true } },
         submission: { select: { student: { select: { userId: true } } } },
+        message: { select: { conversation: { select: { members: { where: { userId: ctx.userId }, select: { userId: true } } } } } },
       },
     });
     if (!f) throw new NotFoundException('Файл не найден');
+    // Файлы переписки — только участникам чата, независимо от роли.
+    if (f.message) {
+      if (f.ownerId === ctx.userId || f.message.conversation.members.length) return f;
+      throw new ForbiddenException('Нет доступа к файлу');
+    }
     if (!CLIENT_ROLES.includes(ctx.roleCode) || f.ownerId === ctx.userId) return f;
     if (f.submission?.student.userId === ctx.userId) return f;
     if (f.homework) {

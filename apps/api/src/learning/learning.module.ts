@@ -27,6 +27,7 @@ import {
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
 import { FinanceService } from '../finance/finance.service';
+import { NotificationsService, when } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { canSeeAll } from '../schedule/groups';
 import {
@@ -123,6 +124,7 @@ export class JournalController {
     private audit: AuditService,
     private settings: SettingsService,
     private finance: FinanceService,
+    private notifications: NotificationsService,
   ) {}
 
   @Get(':id/journal')
@@ -282,7 +284,19 @@ export class JournalController {
       }
     });
     await this.audit.log({ userId: ctx.userId, entity: 'lesson', entityId: id, action: 'grades', after: dto.items });
-    return this.prisma.grade.findMany({ where: { lessonId: id } });
+    const saved = await this.prisma.grade.findMany({ where: { lessonId: id } });
+    // Уведомление «оценка» (ТЗ 3.8): одно сообщение студенту (и родителям по правилу) со всеми навыками.
+    const names: Record<string, string> = { hoeren: 'Hören', lesen: 'Lesen', schreiben: 'Schreiben', sprechen: 'Sprechen', overall: 'Общая' };
+    const byStudent = new Map<string, string[]>();
+    for (const g of saved) byStudent.set(g.studentId, [...(byStudent.get(g.studentId) ?? []), `${names[g.skill] ?? g.skill} ${Number(g.value)}`]);
+    const recipients = await this.notifications.forStudents('grade', [...byStudent.keys()]);
+    await this.notifications.emit(
+      'grade',
+      recipients,
+      (r) => ({ group: lesson.group.name, ...when(lesson.startsAt), grade: (byStudent.get(r.studentId!) ?? []).join(', ') }),
+      { dedupe: `${id}:${Date.now()}` },
+    );
+    return saved;
   }
 
   private async findOwn(ctx: RequestContext, id: string) {
@@ -348,17 +362,9 @@ export class JournalController {
         dueAt: new Date(Date.now() + 24 * 3600_000),
       })),
     });
-    if (student.parents.length) {
-      await this.prisma.notification.createMany({
-        data: student.parents.map((p) => ({
-          userId: p.parentId,
-          studentId,
-          type: 'absence_streak',
-          title: 'Пропуски занятий',
-          body: `${name} пропустил(а) ${n} занятия подряд в группе «${lesson.group.name}». Пожалуйста, свяжитесь с центром.`,
-        })),
-      });
-    }
+    // Уведомление родителям — по шаблону и каналам типа «absence_streak» (ТЗ 3.5, 3.8).
+    const parents = await this.notifications.forStudents('absence_streak', [studentId], true);
+    await this.notifications.emit('absence_streak', parents, { group: lesson.group.name, count: n }, { dedupe: `${lesson.id}` });
     await this.audit.log({
       userId: ctx.userId,
       entity: 'student',

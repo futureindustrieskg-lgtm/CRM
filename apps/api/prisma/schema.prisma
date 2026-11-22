@@ -53,6 +53,8 @@ model User {
   locale          String    @default("ru") // ru | ky | de | en
   /// Категория преподавателя для расчёта оплаты: new | experienced (ставки — в настройках payroll).
   teacherCategory String    @default("new")
+  /// Привязка Telegram-бота центра (уведомления).
+  telegramChatId  String?
   isActive        Boolean   @default(true)
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
@@ -60,14 +62,16 @@ model User {
   roles          UserRole[]
   refreshTokens  RefreshToken[]
   auditLogs      AuditLog[]
-  managedLeads   Lead[]          @relation("LeadManager")
-  tasks          Task[]          @relation("TaskAssignee")
+  managedLeads   Lead[]               @relation("LeadManager")
+  tasks          Task[]               @relation("TaskAssignee")
   leadActivities LeadActivity[]
   student        Student?
   parentLinks    ParentStudent[]
-  teachingGroups Group[]         @relation("GroupTeacher")
-  lessons        Lesson[]        @relation("LessonTeacher")
+  teachingGroups Group[]              @relation("GroupTeacher")
+  lessons        Lesson[]             @relation("LessonTeacher")
   notifications  Notification[]
+  chatMembers    ConversationMember[]
+  chatMessages   ChatMessage[]        @relation("ChatSender")
 }
 
 /// Роль — набор прав. Права: "<модуль>.<действие>", например "leads.read", "finance.delete_records".
@@ -403,21 +407,116 @@ model Setting {
 
 // ───────────── Очередь уведомлений ─────────────
 
-/// Исходящие уведомления. Отправка по каналам (push, WhatsApp, Telegram, SMS, e-mail) — итерация 8.
+/// Очередь уведомлений (ТЗ 3.8): по одному сообщению на получателя.
+/// Канал выбирается при отправке по приоритету типа сообщения и доступным адресам получателя.
 model Notification {
-  id        String    @id @default(uuid())
-  userId    String
-  studentId String?
-  type      String // absence_streak | …
+  id             String    @id @default(uuid())
+  /// Получатель с учётной записью (push / уведомление в кабинете).
+  userId         String?
+  studentId      String?
+  leadId         String?
+  /// Филиал получателя — журнал отправки виден администратору только своего филиала.
+  branchId       String?
+  /// Адреса на момент постановки в очередь.
+  phone          String?
+  email          String?
+  telegramChatId String?
+  locale         String    @default("ru")
+  type           String // lesson_reminder | homework_new | grade | payment_received | debt_reminder | …
+  title          String
+  body           String
+  status         String    @default("queued") // queued | sent | failed | skipped
+  /// Канал, через который ушло сообщение: push | whatsapp | telegram | sms | email.
+  channel        String?
+  error          String?
+  attempts       Int       @default(0)
+  scheduledAt    DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+  readAt         DateTime?
+  /// Ключ защиты от повторов (например, напоминание об одном занятии одному получателю).
+  dedupeKey      String?   @unique
+  broadcastId    String?
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcast Broadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledAt])
+  @@index([userId, readAt])
+  @@index([branchId, createdAt])
+}
+
+/// Шаблон сообщения на языке получателя с подстановкой полей {{name}}, {{date}}, {{amount}}…
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  type      String
+  locale    String // ru | ky
   title     String
   body      String
-  status    String    @default("queued") // queued | sent | failed
-  createdAt DateTime  @default(now())
-  sentAt    DateTime?
+  updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([type, locale])
+}
 
-  @@index([status, createdAt])
+/// Массовая рассылка по сегменту (ТЗ 3.8).
+model Broadcast {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  /// Фильтр получателей: { branchId, status, level, groupId, finishedLevel, debtOnly, includeParents }
+  segment     Json
+  total       Int       @default(0)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  sentAt      DateTime?
+
+  notifications Notification[]
+}
+
+// ───────────── Внутренний чат ─────────────
+
+/// Чат: группы (group), личный «студент — преподаватель» (direct), «клиент — администрация филиала» (support).
+model Conversation {
+  id            String   @id @default(uuid())
+  type          String // group | direct | support
+  groupId       String?  @unique
+  branchId      String?
+  title         String?
+  createdAt     DateTime @default(now())
+  lastMessageAt DateTime @default(now())
+
+  members  ConversationMember[]
+  messages ChatMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationMember {
+  conversationId String
+  userId         String
+  lastReadAt     DateTime @default(now())
+  joinedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id             String    @id @default(uuid())
+  conversationId String
+  senderId       String
+  text           String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("ChatSender", fields: [senderId], references: [id], onDelete: Cascade)
+  files        StoredFile[]
+
+  @@index([conversationId, createdAt])
 }
 
 // ───────────── 3.6 Домашние задания ─────────────
@@ -483,11 +582,13 @@ model StoredFile {
   homeworkId   String?
   submissionId String?
   questionId   String?
+  messageId    String?
   createdAt    DateTime @default(now())
 
   homework   Homework?           @relation("HomeworkFiles", fields: [homeworkId], references: [id], onDelete: SetNull)
   submission HomeworkSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id], onDelete: SetNull)
   question   TestQuestion?       @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  message    ChatMessage?        @relation(fields: [messageId], references: [id], onDelete: SetNull)
 }
 
 // ───────────── 3.6 Тесты ─────────────

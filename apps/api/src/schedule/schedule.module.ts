@@ -16,6 +16,7 @@ import { Prisma } from '@prisma/client';
 import { IsDateString, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
+import { NotificationsService, when } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictService } from './conflicts';
 import { canSeeAll, CoursesController, GroupsController, RoomsController } from './groups';
@@ -61,7 +62,12 @@ const MAX_RANGE_DAYS = 62;
 @ApiBearerAuth()
 @Controller('lessons')
 export class LessonsController {
-  constructor(private prisma: PrismaService, private audit: AuditService, private conflicts: ConflictService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private conflicts: ConflictService,
+    private notifications: NotificationsService,
+  ) {}
 
   /** Календарь (ТЗ 3.3): разрезы — филиал, кабинет, преподаватель, группа. */
   @Get()
@@ -166,8 +172,22 @@ export class LessonsController {
       after,
       reason,
     });
-    // Push-уведомления участникам подключаются в итерации «Уведомления».
+    // Перенос или замена преподавателя — уведомление участникам (ТЗ 3.3, 3.8).
+    if (moved || teacherChanged) {
+      await this.notifyChange(after.id, moved ? `перенесено (${reason})` : `замена преподавателя (${reason})`);
+    }
     return after;
+  }
+
+  /** Сообщение студентам группы (и родителям по правилу) об изменении занятия. */
+  private async notifyChange(lessonId: string, reason: string) {
+    const l = await this.prisma.lesson.findUniqueOrThrow({
+      where: { id: lessonId },
+      include: { group: { select: { name: true, students: { where: { leftAt: null, waitlist: false }, select: { studentId: true } } } } },
+    });
+    if (l.endsAt < new Date()) return;
+    const rs = await this.notifications.forStudents('lesson_changed', l.group.students.map((s) => s.studentId));
+    await this.notifications.emit('lesson_changed', rs, { group: l.group.name, reason, ...when(l.startsAt) }, { dedupe: `${l.id}:${Date.now()}` });
   }
 
   @Post(':id/cancel')
@@ -178,6 +198,7 @@ export class LessonsController {
     if (before.status === 'cancelled') throw new BadRequestException('Занятие уже отменено');
     const after = await this.prisma.lesson.update({ where: { id }, data: { status: 'cancelled' } });
     await this.audit.log({ userId: ctx.userId, entity: 'lesson', entityId: id, action: 'cancel', before: { status: before.status }, after: { status: after.status }, reason: dto.reason });
+    await this.notifyChange(id, `отменено (${dto.reason})`);
     return after;
   }
 
