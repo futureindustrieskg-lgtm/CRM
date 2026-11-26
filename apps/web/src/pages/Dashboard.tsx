@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
+import { DirectorKpi } from './Reports';
 import { ErrorText, fmtMoney } from '../ui';
 
 interface Summary {
@@ -28,6 +29,7 @@ export function DashboardPage() {
         {t('dashboard')} · {me?.firstName}
       </h1>
       <ErrorText error={q.error} />
+      {can('reports.read') && <DirectorKpi />}
       {d && (
         <>
           <div className="stats">
@@ -44,7 +46,7 @@ export function DashboardPage() {
                 <Stat label={t('debtors')} value={d.debtors} danger={d.debtors > 0} />
               </>
             )}
-            {d.revenueMonth !== null && <Stat label={t('revenueMonth')} value={fmtMoney(d.revenueMonth)} />}
+            {d.revenueMonth !== null && !can('reports.read') && <Stat label={t('revenueMonth')} value={fmtMoney(d.revenueMonth)} />}
             <Stat label={t('overdueTasks')} value={d.overdueTasks} danger={d.overdueTasks > 0} />
           </div>
           {can('leads.read') && (

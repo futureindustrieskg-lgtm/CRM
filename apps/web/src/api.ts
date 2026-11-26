@@ -107,15 +107,42 @@ export async function uploadFile(file: Blob, name: string, retry = true): Promis
   return data;
 }
 
-/** Файл с авторизацией → временная ссылка (object URL) для <img>, <audio>, скачивания. */
-export async function fileBlobUrl(id: string, retry = true): Promise<string> {
+/** Ответ API в виде файла (PDF, Excel) с авторизацией → временная ссылка (object URL). */
+export async function apiBlobUrl(path: string, retry = true): Promise<string> {
   const headers: Record<string, string> = {};
   if (memory?.accessToken) headers.Authorization = `Bearer ${memory.accessToken}`;
   if (memory?.activeRoleId) headers['X-Active-Role'] = memory.activeRoleId;
-  const res = await fetch(`/api/v1/files/${id}`, { headers });
-  if (res.status === 401 && retry && (await tryRefresh())) return fileBlobUrl(id, false);
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  const res = await fetch(`/api/v1${path}`, { headers });
+  if (res.status === 401 && retry && (await tryRefresh())) return apiBlobUrl(path, false);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data.message ?? res.statusText, data);
+  }
   return URL.createObjectURL(await res.blob());
+}
+
+/** Файл с авторизацией → временная ссылка для <img>, <audio>, скачивания. */
+export const fileBlobUrl = (id: string) => apiBlobUrl(`/files/${id}`);
+
+/** Открыть PDF в новой вкладке или скачать файл (Excel) под заданным именем. */
+export async function openFile(path: string, downloadName?: string) {
+  // Вкладку открываем сразу по клику (иначе браузер заблокирует «всплывающее окно»), адрес — после загрузки.
+  const tab = downloadName ? null : window.open('', '_blank');
+  let url: string;
+  try {
+    url = await apiBlobUrl(path);
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+  if (downloadName) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = downloadName;
+    a.click();
+  } else if (tab) tab.location.href = url;
+  else window.location.href = url;
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function qs(params: Record<string, string | undefined | null>) {

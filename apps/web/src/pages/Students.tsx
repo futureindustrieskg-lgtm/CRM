@@ -17,6 +17,7 @@ import {
   Modal,
   STATUSES,
 } from '../ui';
+import { StudentDocuments, StudentExams } from './Documents';
 import { StudentFinance } from './Finance';
 import { StudentProgress } from './Journal';
 import { useBranches } from './Leads';
@@ -339,6 +340,8 @@ function StudentDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             <p className="muted">{t('noData')}</p>
           )}
 
+          <StudentDocuments student={s} />
+          <StudentExams studentId={s.id} />
           <StudentFinance student={s} />
           <h3>{t('payments')}</h3>
           {s.payments.length ? (

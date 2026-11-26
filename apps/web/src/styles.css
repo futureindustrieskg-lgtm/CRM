@@ -319,3 +319,18 @@ tr.click:hover td { background: var(--surface-2); }
   .chat:not(.has-open) .chat-view { display: none; }
   .chat-back { display: inline-flex; }
 }
+
+/* Reports */
+th.num, td.num { text-align: right; }
+tr.total td { font-weight: 700; background: var(--surface-2); }
+.report-section { margin-bottom: 20px; }
+.print-only { display: none; }
+@media print {
+  .sidebar, .topbar, .no-print, .bell, button { display: none !important; }
+  .print-only { display: block; }
+  body, .main, .content { background: #fff !important; color: #000; padding: 0 !important; }
+  .table-wrap { overflow: visible; border: 0; }
+  th, td { white-space: normal; border-bottom: 1px solid #ccc; }
+  .card { box-shadow: none; border: 1px solid #ccc; }
+  .report-section { break-inside: avoid; }
+}

@@ -7,6 +7,8 @@ import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
 import { FinancePage } from './pages/Finance';
 import { ChatPage, useChatUnread } from './pages/Chat';
+import { CompanyPage, DocumentsPage } from './pages/Documents';
+import { ReportsPage } from './pages/Reports';
 import { GroupsPage } from './pages/Groups';
 import { NotificationBell, NotificationsPage } from './pages/Notifications';
 import { HomeworkPage } from './pages/Homework';
@@ -113,6 +115,8 @@ function Layout() {
     { to: '/groups', label: t('groups'), show: can('groups.read') },
     { to: '/courses', label: t('courses'), show: can('groups.read') },
     { to: '/finance', label: t('finance'), show: can('finance.read') },
+    { to: '/reports', label: t('reports'), show: can('reports.read') },
+    { to: '/documents', label: t('documentsTitle'), show: can('documents.read') },
     { to: '/payroll', label: can('finance.salaries') ? t('payroll') : t('myPayroll'), show: can('finance.salaries') || can('attendance.create') },
   ];
   const admin = [
@@ -122,6 +126,7 @@ function Layout() {
     { to: '/rooms', label: t('rooms'), show: can('schedule.update') },
     { to: '/learning-rules', label: t('learningRules'), show: can('branches.update') },
     { to: '/notifications', label: t('notifications'), show: can('messages.update') },
+    { to: '/company', label: t('companyTitle'), show: can('branches.update') },
     { to: '/audit', label: t('audit'), show: can('audit.read') },
   ].filter((n) => n.show);
 
@@ -179,6 +184,9 @@ function Layout() {
           <Routes>
             <Route path="/" element={activeRole?.code === 'student' ? <Navigate to="/my/homework" /> : <DashboardPage />} />
             <Route path="/my/homework" element={<MyHomeworkPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
+            <Route path="/company" element={<CompanyPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:id" element={<ChatPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

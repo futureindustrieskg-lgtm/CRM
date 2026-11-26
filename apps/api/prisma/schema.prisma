@@ -244,6 +244,8 @@ model Student {
   submissions   HomeworkSubmission[]
   subscriptions Subscription[]
   homework      Homework[]           @relation("HomeworkStudent")
+  documents     IssuedDocument[]
+  exams         ExternalExam[]
   testAttempts  TestAttempt[]
 
   @@index([branchId, status])
@@ -736,4 +738,49 @@ model Subscription {
   payments   Payment[]
 
   @@index([studentId, status])
+}
+
+// ───────────── 3.9 Документы ─────────────
+
+/// Реестр выданных документов: сквозной номер по типу и году.
+model IssuedDocument {
+  id             String   @id @default(uuid())
+  /// contract | invoice | act | reference | certificate
+  type           String
+  /// Номер вида «Д-2026-0001».
+  number         String   @unique
+  seq            Int
+  year           Int
+  studentId      String
+  subscriptionId String?
+  groupId        String?
+  amount         Decimal? @db.Decimal(12, 2)
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([type, year, seq])
+  @@index([studentId])
+}
+
+/// Внешний экзамен студента: Goethe, telc, ÖSD, TestDaF (ТЗ 3.9).
+model ExternalExam {
+  id        String   @id @default(uuid())
+  studentId String
+  /// goethe | telc | osd | testdaf
+  provider  String
+  level     String
+  date      DateTime
+  /// Баллы или процент, если известны.
+  score     Decimal? @db.Decimal(6, 2)
+  /// registered | passed | failed
+  status    String   @default("registered")
+  comment   String?
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([date])
 }
