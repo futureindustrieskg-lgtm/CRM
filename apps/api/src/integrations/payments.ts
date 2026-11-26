@@ -41,7 +41,7 @@ const env = (k: string) => process.env[k]?.trim() || '';
 export const paymentsTestMode = () => env('PAYMENTS_TEST_MODE') === '1';
 export const gatewayConfigured = () => !!env('PAYMENT_GATEWAY_URL');
 export const fiscalConfigured = () => !!env('FISCAL_API_URL');
-const LINK_TTL_HOURS = 72;
+export const LINK_TTL_HOURS = 72;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ───────────── Фискальные чеки ─────────────

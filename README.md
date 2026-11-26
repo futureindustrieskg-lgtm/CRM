@@ -91,6 +91,16 @@ npm run dev:api                             # API: http://localhost:3000/api/v1,
 npm run dev:web                             # Веб: http://localhost:5173
 ```
 
+Мобильное приложение (Android / iOS, Expo) — отдельный пакет `apps/mobile`, см. [apps/mobile/README.md](apps/mobile/README.md):
+
+```powershell
+cd apps/mobile; npm install; npx expo start    # QR для Expo Go; --web — проверка в браузере
+```
+
+- Мобильное приложение (этап 4, итерация 1): студент и родитель — баланс и оплата долга, абонементы, расписание
+  с входом в онлайн-урок, оценки и посещаемость, ДЗ, сообщения; преподаватель — журнал в 2 нажатия с отметками
+  без интернета; push-уведомления через Expo Push Service (FCM / APNs). Переменная `EXPO_ACCESS_TOKEN` в `.env` API — необязательна.
+
 ## Загрузка на GitHub
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\CRM\autopush.ps1

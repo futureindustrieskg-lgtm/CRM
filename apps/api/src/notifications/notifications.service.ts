@@ -4,6 +4,7 @@ import { OnlineMeetingService } from '../integrations/online';
 import { PrismaService } from '../prisma/prisma.service';
 import { CENTER_TZ, localDate, zonedToUtc } from '../schedule/time';
 import { Address, Channel, hasAddress, isAvailable, send } from './channels';
+import { pushToUser } from './expo';
 import { DEFAULT_TEMPLATES, NOTIFICATION_TYPES, render, TypeRule } from './templates';
 
 export const CENTER_NAME = process.env.CENTER_NAME ?? 'Deutschzentrum';
@@ -221,6 +222,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         for (const ch of channels) {
           const r = await send(ch, n, n.title, n.body);
           if (r.ok) {
+            // Уведомление в кабинете дублируется push-ом на телефон (если приложение установлено).
+            if (ch === 'push' && n.userId) await pushToUser(this.prisma, n.userId, { title: n.title, body: n.body, data: { type: n.type, id: n.id } });
             await this.prisma.notification.update({
               where: { id: n.id },
               data: { status: r.simulated ? 'simulated' : 'sent', channel: ch, sentAt: new Date(), attempts: { increment: 1 }, error: null },
