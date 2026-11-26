@@ -46,18 +46,64 @@ npx expo start
 
 Демо-входы — те же, что в вебе: `asel@crm.test` (студентка), `parent@crm.test` (родитель), `teacher2@crm.test` (преподаватель).
 
-## Сборка для магазинов (этап 6)
+## Сборка для телефонов и магазинов (EAS)
 
-Сборки делаются в EAS (Expo Application Services):
+Сборки делаются в облаке EAS (Expo Application Services); Mac для iOS не нужен.
+Профили — в `eas.json`:
 
-1. `npx eas login`, `npx eas init` — создаёт проект и записывает `extra.eas.projectId` в `app.json`.
-2. Push: загрузить в EAS ключ FCM (Android, файл google-services / сервисный аккаунт Firebase) и ключ APNs (iOS).
-3. `npx eas build -p android` / `npx eas build -p ios`, затем `npx eas submit`.
-4. Перед публикацией заменить `apiUrl` на адрес боевого сервера (HTTPS) и проверить идентификаторы
-   `kg.deutschzentrum.crm` (Android package / iOS bundle id) — их выбирает заказчик, после публикации не меняются.
+| Профиль | Что получается | Для чего |
+|---|---|---|
+| `preview` | Android APK для установки по ссылке | проверка на телефонах сотрудников и пилотной группы, push работает |
+| `production` | AAB (Google Play) и IPA (App Store / TestFlight), номер сборки растёт автоматически | публикация |
 
-Push проверяется на реальном телефоне (на эмуляторе и в веб-версии недоступен). Expo Go годится для разработки;
-окончательная проверка push — в сборке EAS (development или production build).
+Адрес API задаётся в профиле (`EXPO_PUBLIC_API_URL` в `eas.json`): сейчас стоят заглушки `staging.example.com`
+и `crm.example.com` — **замените на адрес вашего сервера (HTTPS)** до первой сборки.
+
+### Шаг 1. Аккаунт и проект (один раз)
+
+```powershell
+cd apps/mobile
+npx eas-cli@latest login
+```
+
+```powershell
+npx eas-cli@latest init
+```
+
+`init` создаёт проект в Expo и записывает `extra.eas.projectId` в `app.json` — этот файл нужно закоммитить.
+Пароль вводите сами; токены и ключи в репозиторий не кладутся.
+
+### Шаг 2. Тестовая сборка Android (без Google Play)
+
+```powershell
+npx eas-cli@latest build --profile preview --platform android
+```
+
+Через 10–20 минут EAS даёт ссылку и QR-код на APK — его можно поставить на любой Android-телефон.
+
+### Шаг 3. Push-уведомления
+
+- **Android:** проект в Firebase → приложение с пакетом `kg.deutschzentrum.crm` → ключ сервисного аккаунта
+  (JSON) → `npx eas-cli@latest credentials` → Android → Push Notifications (FCM V1). Файл ключа хранится только у вас.
+- **iOS:** при первой iOS-сборке EAS сам создаёт ключ APNs в вашем Apple Developer аккаунте (нужен вход в Apple ID).
+
+### Шаг 4. Магазины
+
+- **Google Play:** аккаунт разработчика ($25 один раз) → приложение `kg.deutschzentrum.crm` →
+  `npx eas-cli@latest build --profile production --platform android --auto-submit` (дорожка `internal` — внутреннее тестирование).
+- **App Store:** Apple Developer ($99 в год) → `npx eas-cli@latest build --profile production --platform ios --auto-submit`
+  → TestFlight → отправка на проверку.
+
+До публикации нужны (этап 2 «Дизайн»): иконка 1024×1024 (`icon` в `app.json`), экран загрузки (`splash`),
+скриншоты и описание для магазинов, политика конфиденциальности (ссылка обязательна в обоих магазинах).
+Идентификатор `kg.deutschzentrum.crm` после публикации не меняется — подтвердите его заранее.
+
+### Обновление SDK
+
+Проект на Expo SDK 52. `expo-av` (запись и воспроизведение голоса) в новых SDK заменён на `expo-audio`:
+при переходе на SDK 53+ модуль `src/media.tsx` нужно перевести на `expo-audio` (expo-doctor об этом предупреждает).
+
+Push проверяется на реальном телефоне (на эмуляторе и в веб-версии недоступен).
 
 ## Проверки
 

@@ -9,11 +9,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "kg.deutschzentrum.crm"
+      "bundleIdentifier": "kg.deutschzentrum.crm",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "kg.deutschzentrum.crm",
-      "permissions": ["POST_NOTIFICATIONS"]
+      "permissions": ["POST_NOTIFICATIONS", "CAMERA", "RECORD_AUDIO"],
+      "blockedPermissions": ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.WRITE_EXTERNAL_STORAGE"]
     },
     "web": {
       "bundler": "metro"
