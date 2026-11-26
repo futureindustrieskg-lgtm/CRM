@@ -22,6 +22,7 @@ import { LeadsPage, useBranches } from './pages/Leads';
 import { setTimezone } from './tz';
 import { SchedulePage } from './pages/Schedule';
 import { StudentsPage } from './pages/Students';
+import { ImportPage } from './pages/Import';
 import { TasksPage } from './pages/Tasks';
 import { ErrorText } from './ui';
 
@@ -108,6 +109,7 @@ function Layout() {
     { to: '/leads', label: t('leads'), show: can('leads.read') },
     { to: '/tasks', label: t('tasks'), show: can('leads.read') },
     { to: '/students', label: t('students'), show: can('students.read') },
+    { to: '/import', label: t('importTitle'), show: can('students.create') || can('leads.create') },
     { to: '/today', label: t('myLessons'), show: can('attendance.create') },
     { to: '/my/homework', label: t('myHomework'), show: activeRole?.code === 'student' },
     { to: '/schedule', label: t('schedule'), show: can('schedule.read') },
@@ -203,6 +205,7 @@ function Layout() {
             <Route path="/leads/:id" element={<LeadsPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/students" element={<StudentsPage />} />
+            <Route path="/import" element={<ImportPage />} />
             <Route path="/students/:id" element={<StudentsPage />} />
             <Route path="/today" element={<TodayPage />} />
             <Route path="/finance" element={<FinancePage />} />

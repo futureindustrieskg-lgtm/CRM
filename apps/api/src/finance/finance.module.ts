@@ -433,7 +433,8 @@ export class FinanceController {
   @RequirePermissions('finance.read')
   async summary(@Ctx() ctx: RequestContext, @Query('from') from?: string, @Query('to') to?: string, @Query('branchId') branchId?: string) {
     const p = period(from, to);
-    const where: Prisma.PaymentWhereInput = { ...branchScope(ctx, branchId), deletedAt: null, paidAt: { gte: p.from, lt: p.to } };
+    // Начальные остатки при переносе данных (type opening) — не поступления периода.
+    const where: Prisma.PaymentWhereInput = { ...branchScope(ctx, branchId), deletedAt: null, type: { not: 'opening' }, paidAt: { gte: p.from, lt: p.to } };
     const rows = await this.prisma.payment.findMany({
       where,
       select: { amount: true, type: true, method: true, branch: { select: { name: true } }, subscription: { select: { course: { select: { name: true } } } } },

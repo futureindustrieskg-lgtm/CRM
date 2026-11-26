@@ -81,7 +81,7 @@ export class ReportsController {
     const p = period();
     const month = ym(p.from);
     const [paid, debt, groups, marks, plan] = await Promise.all([
-      this.prisma.payment.aggregate({ where: { ...scope, deletedAt: null, paidAt: { gte: p.from, lt: p.to } }, _sum: { amount: true } }),
+      this.prisma.payment.aggregate({ where: { ...scope, deletedAt: null, type: { not: 'opening' }, paidAt: { gte: p.from, lt: p.to } }, _sum: { amount: true } }),
       this.prisma.student.aggregate({ where: { ...scope, balance: { lt: 0 } }, _sum: { balance: true }, _count: true }),
       this.prisma.group.findMany({
         where: { ...scope, status: { not: 'finished' } },
@@ -250,7 +250,8 @@ export class ReportsController {
   // ───── Выручка ─────
   private async revenue(p: ReturnType<typeof period>, scope: { branchId?: string }): Promise<Report> {
     const rows = await this.prisma.payment.findMany({
-      where: { ...scope, deletedAt: null, paidAt: { gte: p.from, lt: p.to } },
+      // Начальные остатки при переносе данных (type opening) в выручку не входят.
+      where: { ...scope, deletedAt: null, type: { not: 'opening' }, paidAt: { gte: p.from, lt: p.to } },
       select: { amount: true, type: true, method: true, paidAt: true, branch: { select: { name: true } }, subscription: { select: { course: { select: { name: true } } } } },
     });
     const plan = scope.branchId ? {} : await this.plan();

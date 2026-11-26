@@ -246,7 +246,7 @@ export class DashboardController {
         this.prisma.task.count({ where: { assigneeId: ctx.userId, doneAt: null, dueAt: { lt: new Date() } } }),
         canFinance
           ? this.prisma.payment.aggregate({
-              where: { ...scope, deletedAt: null, paidAt: { gte: monthStart } },
+              where: { ...scope, deletedAt: null, type: { not: 'opening' }, paidAt: { gte: monthStart } },
               _sum: { amount: true },
             })
           : null,

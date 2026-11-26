@@ -13,6 +13,7 @@ import { ReportsModule } from './reports/reports.module';
 import { FinanceModule } from './finance/finance.module';
 import { HomeworkModule } from './homework/homework.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { ImportModule } from './import/import.module';
 import { MobileModule } from './mobile/mobile.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LearningModule } from './learning/learning.module';
@@ -45,6 +46,7 @@ import { StudentsModule } from './students/students.module';
     ReportsModule,
     IntegrationsModule,
     MobileModule,
+    ImportModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

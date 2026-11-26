@@ -94,17 +94,22 @@ export interface FileRef {
 }
 
 /** Загрузка файла (multipart); возвращает ссылку для прикрепления к ДЗ, сдаче или вопросу. */
-export async function uploadFile(file: Blob, name: string, retry = true): Promise<FileRef> {
+export function uploadFile(file: Blob, name: string): Promise<FileRef> {
+  return uploadTo<FileRef>('/files', file, name);
+}
+
+/** Отправка файла (multipart, поле file) на любой адрес API — например, разбор таблицы для импорта. */
+export async function uploadTo<T>(path: string, file: Blob, name: string, retry = true): Promise<T> {
   const fd = new FormData();
   fd.append('file', file, name);
   const headers: Record<string, string> = {};
   if (memory?.accessToken) headers.Authorization = `Bearer ${memory.accessToken}`;
   if (memory?.activeRoleId) headers['X-Active-Role'] = memory.activeRoleId;
-  const res = await fetch('/api/v1/files', { method: 'POST', headers, body: fd });
-  if (res.status === 401 && retry && (await tryRefresh())) return uploadFile(file, name, false);
+  const res = await fetch(`/api/v1${path}`, { method: 'POST', headers, body: fd });
+  if (res.status === 401 && retry && (await tryRefresh())) return uploadTo<T>(path, file, name, false);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data.message ?? res.statusText, data);
-  return data;
+  return data as T;
 }
 
 /** Ответ API в виде файла (PDF, Excel) с авторизацией → временная ссылка (object URL). */
