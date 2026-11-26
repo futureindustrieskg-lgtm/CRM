@@ -2,14 +2,16 @@
  * Мобильное приложение CRM (ТЗ 4): студент, родитель, преподаватель.
  * Набор вкладок зависит от активной роли; сотрудники офиса работают в веб-версии.
  */
+import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { api, currentSession, loadSession, login, logout, pickRole, Profile, Role, setActiveRole, setLogoutHandler } from './api';
 import { I18nCtx, Locale, LOCALES, translate } from './i18n';
 import { startAutoSync } from './offline';
 import { registerForPush, unregisterPush } from './push';
+import { ChatListScreen, ChatScreen } from './screens/Chat';
 import { HomeScreen, HomeworkScreen, ProgressScreen, ScheduleScreen } from './screens/Client';
 import { InboxScreen, LoginScreen, ProfileScreen } from './screens/Common';
 import { JournalScreen, TeacherLessonsScreen } from './screens/Teacher';
@@ -17,15 +19,24 @@ import { TestRunScreen } from './screens/TestRun';
 import { getJson, setJson } from './storage';
 import { Card, Loading, Screen, T, useColors } from './ui';
 
-type Tab = 'home' | 'schedule' | 'progress' | 'homework' | 'lessons' | 'inbox' | 'profile';
+type Tab = 'home' | 'schedule' | 'progress' | 'homework' | 'lessons' | 'chat' | 'inbox' | 'profile';
 
+/** Вкладки по ролям (не больше 6 — помещаются на узком экране). У студента «Успехи» открываются с главной. */
 const TABS: Record<string, Tab[]> = {
-  student: ['home', 'schedule', 'progress', 'homework', 'inbox', 'profile'],
-  parent: ['home', 'schedule', 'progress', 'inbox', 'profile'],
-  teacher: ['lessons', 'inbox', 'profile'],
+  student: ['home', 'schedule', 'homework', 'chat', 'inbox', 'profile'],
+  parent: ['home', 'schedule', 'progress', 'chat', 'inbox', 'profile'],
+  teacher: ['lessons', 'chat', 'inbox', 'profile'],
 };
-const ICONS: Record<Tab, string> = { home: '🏠', schedule: '📅', progress: '📈', homework: '📝', lessons: '✅', inbox: '🔔', profile: '👤' };
-const TAB_LABEL: Record<Tab, string> = { home: 'home', schedule: 'schedule', progress: 'progress', homework: 'homework', lessons: 'lessons', inbox: 'inbox', profile: 'profile' };
+/** Экраны роли, открываемые не с панели вкладок (подсвечивается вкладка-родитель). */
+const HIDDEN: Record<string, Partial<Record<Tab, Tab>>> = { student: { progress: 'home' } };
+const ICONS: Record<Tab, string> = { home: '🏠', schedule: '📅', progress: '📈', homework: '📝', lessons: '✅', chat: '💬', inbox: '🔔', profile: '👤' };
+const TAB_LABEL: Record<Tab, string> = { home: 'home', schedule: 'schedule', progress: 'progress', homework: 'homework', lessons: 'lessons', chat: 'chats', inbox: 'inbox', profile: 'profile' };
+
+/** Сотрудники офиса работают в веб-версии; в приложении — чат (обращения клиентов), уведомления, профиль. */
+function tabsFor(role: Role): Tab[] {
+  const chat = role.permissions.includes('messages.read') || role.permissions.includes('*');
+  return TABS[role.code] ?? [...(chat ? (['chat'] as Tab[]) : []), 'inbox', 'profile'];
+}
 
 export default function App() {
   const [locale, setLocaleState] = useState<Locale>('ru');
@@ -37,6 +48,8 @@ export default function App() {
   const [testToken, setTestToken] = useState<string | null>(null);
   const [pushState, setPushState] = useState<string | null | undefined>(undefined);
   const [unread, setUnread] = useState(0);
+  const [chatUnread, setChatUnread] = useState(0);
+  const [chat, setChat] = useState<{ id: string; title: string } | null>(null);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
@@ -50,6 +63,7 @@ export default function App() {
     setRoleId(undefined);
     setJournal(null);
     setTestToken(null);
+    setChat(null);
   }, []);
 
   // Запуск: язык, сохранённая сессия, офлайн-очередь.
@@ -80,9 +94,10 @@ export default function App() {
   }, [reset]);
 
   const role = profile?.roles.find((r) => r.id === roleId) ?? (profile ? pickRole(profile.roles) : undefined);
-  const tabs = role ? TABS[role.code] ?? ['inbox', 'profile'] : [];
+  const tabs = role ? tabsFor(role) : [];
+  const hidden = (role && HIDDEN[role.code]) || {};
   // Вкладка, недоступная активной роли, не отрисовывается даже на мгновение (лишние запросы).
-  const current: Tab = tabs.includes(tab) ? tab : tabs[0] ?? 'profile';
+  const current: Tab = tabs.includes(tab) || hidden[tab] ? tab : tabs[0] ?? 'profile';
 
   useEffect(() => {
     if (!profile) return;
@@ -91,23 +106,45 @@ export default function App() {
   }, [profile]);
 
   useEffect(() => {
-    if (tabs.length && !tabs.includes(tab)) setTab(tabs[0]);
+    if (tabs.length && !tabs.includes(tab) && !hidden[tab]) setTab(tabs[0]);
   }, [role?.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Счётчик непрочитанных на вкладке «Сообщения».
   useEffect(() => {
     if (!profile) return;
-    const load = () => api<{ unread: number }>('/notifications/inbox').then((r) => setUnread(r.unread)).catch(() => {});
+    const load = () => {
+      api<{ unread: number }>('/notifications/inbox').then((r) => setUnread(r.unread)).catch(() => {});
+      if (tabs.includes('chat')) api<{ unread: number }>('/chat/unread').then((r) => setChatUnread(r.unread)).catch(() => {});
+    };
     load();
-    const id = setInterval(load, 60_000);
+    const id = setInterval(load, 30_000);
     return () => clearInterval(id);
-  }, [profile, roleId]);
+  }, [profile, roleId, chat]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Нажатие на push: сообщение чата открывает переписку, остальное — «Сообщения».
+  useEffect(() => {
+    if (Platform.OS === 'web' || !profile) return;
+    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const data = resp.notification.request.content.data as { type?: string; conversationId?: string };
+      setJournal(null);
+      setTestToken(null);
+      if (data?.type === 'chat' && data.conversationId) {
+        setTab('chat');
+        setChat({ id: data.conversationId, title: resp.notification.request.content.title ?? '' });
+      } else {
+        setChat(null);
+        setTab('inbox');
+      }
+    });
+    return () => sub.remove();
+  }, [profile]);
 
   const doLogin = async (l: string, p: string) => {
     const me = await login(l, p);
     setProfile(me);
     setRoleId(currentSession()?.activeRoleId);
-    setTab(TABS[pickRole(me.roles)?.code ?? '']?.[0] ?? 'inbox');
+    const r0 = pickRole(me.roles);
+    setTab(r0 ? tabsFor(r0)[0] : 'inbox');
   };
   const doLogout = async () => {
     await unregisterPush();
@@ -118,7 +155,8 @@ export default function App() {
     await setActiveRole(r.id);
     setRoleId(r.id);
     setJournal(null);
-    setTab((TABS[r.code] ?? ['inbox'])[0]);
+    setChat(null);
+    setTab(tabsFor(r)[0]);
   };
 
   return (
@@ -136,14 +174,18 @@ export default function App() {
                   <TestRunScreen token={testToken} onBack={() => setTestToken(null)} />
                 ) : journal ? (
                   <JournalScreen lessonId={journal} onBack={() => setJournal(null)} />
+                ) : chat ? (
+                  <ChatScreen key={chat.id} id={chat.id} title={chat.title} meId={profile.id} onBack={() => setChat(null)} />
                 ) : current === 'home' ? (
-                  <HomeScreen key={role.id} />
+                  <HomeScreen key={role.id} onProgress={hidden.progress ? () => setTab('progress') : undefined} />
                 ) : current === 'schedule' ? (
                   <ScheduleScreen key={role.id} />
                 ) : current === 'progress' ? (
                   <ProgressScreen key={role.id} />
                 ) : current === 'homework' ? (
                   <HomeworkScreen key={testToken ?? 'hw'} onTest={(token) => setTestToken(token)} />
+                ) : current === 'chat' ? (
+                  <ChatListScreen onOpen={(id, title) => setChat({ id, title })} />
                 ) : current === 'lessons' ? (
                   <TeacherLessonsScreen onOpen={setJournal} />
                 ) : current === 'inbox' ? (
@@ -155,7 +197,18 @@ export default function App() {
                   <ProfileScreen profile={profile} role={role} pushState={pushState} onRole={changeRole} onLogout={doLogout} />
                 )}
               </View>
-              <TabBar tabs={tabs} tab={journal ? 'lessons' : current} unread={unread} onChange={(x) => { setJournal(null); setTestToken(null); setTab(x); }} t={i18n.t} />
+              <TabBar
+                tabs={tabs}
+                tab={journal ? 'lessons' : chat ? 'chat' : hidden[current] ?? current}
+                badges={{ inbox: unread, chat: chatUnread }}
+                onChange={(x) => {
+                  setJournal(null);
+                  setTestToken(null);
+                  setChat(null);
+                  setTab(x);
+                }}
+                t={i18n.t}
+              />
             </>
           )}
         </Shell>
@@ -184,7 +237,7 @@ function StaffNote() {
   );
 }
 
-function TabBar({ tabs, tab, unread, onChange, t }: { tabs: Tab[]; tab: Tab; unread: number; onChange: (t: Tab) => void; t: (k: string) => string }) {
+function TabBar({ tabs, tab, badges, onChange, t }: { tabs: Tab[]; tab: Tab; badges: Partial<Record<Tab, number>>; onChange: (t: Tab) => void; t: (k: string) => string }) {
   const c = useColors();
   return (
     <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.card }}>
@@ -192,9 +245,9 @@ function TabBar({ tabs, tab, unread, onChange, t }: { tabs: Tab[]; tab: Tab; unr
         <Pressable key={x} onPress={() => onChange(x)} accessibilityRole="tab" accessibilityState={{ selected: x === tab }} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
           <View>
             <Text style={{ fontSize: 20 }}>{ICONS[x]}</Text>
-            {x === 'inbox' && unread > 0 && (
+            {!!badges[x] && (
               <View style={{ position: 'absolute', top: -4, right: -12, backgroundColor: c.danger, borderRadius: 999, minWidth: 18, paddingHorizontal: 4, alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{unread > 99 ? '99+' : unread}</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{badges[x]! > 99 ? '99+' : badges[x]}</Text>
               </View>
             )}
           </View>

@@ -50,9 +50,29 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
   return <View style={[{ backgroundColor: c.card, borderRadius: 12, padding: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, gap: 6 }, style]}>{children}</View>;
 }
 
-export function T({ children, muted, bold, size, color, style }: { children: ReactNode; muted?: boolean; bold?: boolean; size?: number; color?: string; style?: TextStyle }) {
+export function T({
+  children,
+  muted,
+  bold,
+  size,
+  color,
+  style,
+  numberOfLines,
+}: {
+  children: ReactNode;
+  muted?: boolean;
+  bold?: boolean;
+  size?: number;
+  color?: string;
+  style?: TextStyle;
+  numberOfLines?: number;
+}) {
   const c = useColors();
-  return <Text style={[{ color: color ?? (muted ? c.muted : c.text), fontSize: size ?? 15, fontWeight: bold ? '700' : '400' }, style]}>{children}</Text>;
+  return (
+    <Text numberOfLines={numberOfLines} style={[{ color: color ?? (muted ? c.muted : c.text), fontSize: size ?? 15, fontWeight: bold ? '700' : '400' }, style]}>
+      {children}
+    </Text>
+  );
 }
 
 export function Title({ children }: { children: ReactNode }) {

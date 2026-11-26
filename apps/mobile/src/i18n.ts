@@ -106,6 +106,16 @@ const ru = {
   timedOut: 'Время вышло — засчитаны данные ответы',
   severalAnswers: 'Можно выбрать несколько вариантов',
   yourAnswer: 'Ваш ответ',
+  chats: 'Чаты',
+  chat: 'Чат',
+  newChat: 'Новый чат',
+  noChats: 'Чатов пока нет. Начните новый — с преподавателем или администрацией.',
+  noContacts: 'Нет доступных собеседников',
+  supportChat: 'Администрация филиала',
+  message: 'Сообщение',
+  earlier: 'Ранее',
+  noMessages: 'Сообщений пока нет',
+  chatGone: 'Вы больше не участник этого чата (например, перевод в другую группу).',
 };
 export type TKey = keyof typeof ru;
 type Dict = Partial<Record<TKey, string>>;
@@ -165,6 +175,10 @@ const ky: Dict = {
   next: 'Кийинки',
   prev: 'Артка',
   yourAnswer: 'Сиздин жооп',
+  chats: 'Чаттар',
+  newChat: 'Жаңы чат',
+  supportChat: 'Филиалдын администрациясы',
+  message: 'Билдирүү',
 };
 
 export const LOCALES = { ru: 'Рус', ky: 'Кыр' } as const;

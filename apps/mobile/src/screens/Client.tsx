@@ -57,8 +57,8 @@ function StaleNote({ stale }: { stale: boolean }) {
   return stale ? <T color={c.warn}>{t('offline')}</T> : null;
 }
 
-export function HomeScreen() {
-  const { t, locale } = useI18n();
+export function HomeScreen({ onProgress }: { onProgress?: () => void }) {
+  const { t } = useI18n();
   const c = useColors();
   const q = useCabinet();
   const [i, setI] = useState(0);
@@ -109,6 +109,7 @@ export function HomeScreen() {
               </Row>
             ))}
           </Card>
+          {onProgress && <Button kind="plain" title={`📈 ${t('progress')}: ${t('grades').toLowerCase()}, ${t('attendance').toLowerCase()}`} onPress={onProgress} />}
           <Card>
             <Title>{t('upcoming')}</Title>
             {s.upcoming.slice(0, 3).map((l) => (

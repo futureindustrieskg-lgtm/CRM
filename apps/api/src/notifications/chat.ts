@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Logger, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Ctx, RequestContext, RequirePermissions } from '../common/context';
 import { PrismaService } from '../prisma/prisma.service';
+import { pushToUser } from './expo';
 
 class MessageDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) text?: string;
@@ -23,6 +24,8 @@ const fileSelect = { select: { id: true, name: true, mime: true, size: true } } 
 @ApiBearerAuth()
 @Controller('chat')
 export class ChatController {
+  private log = new Logger('Chat');
+
   constructor(private prisma: PrismaService) {}
 
   /** Группы пользователя: преподаватель — свои, студент — где учится. */
@@ -74,7 +77,13 @@ export class ChatController {
   @Get('conversations')
   @RequirePermissions('messages.read')
   async list(@Ctx() ctx: RequestContext) {
-    await this.syncGroups(await this.myGroupIds(ctx));
+    // Сверяем и текущие группы, и чаты групп, где пользователь ещё числится: ушедший из группы
+    // (перевод, окончание) перестаёт видеть её чат.
+    const stale = await this.prisma.conversation.findMany({
+      where: { type: 'group', groupId: { not: null }, members: { some: { userId: ctx.userId } } },
+      select: { groupId: true },
+    });
+    await this.syncGroups([...new Set([...(await this.myGroupIds(ctx)), ...stale.map((c) => c.groupId!)])]);
     await this.syncSupport(ctx);
     const convs = await this.prisma.conversation.findMany({
       where: { members: { some: { userId: ctx.userId } } },
@@ -190,7 +199,25 @@ export class ChatController {
       await tx.conversationMember.update({ where: { conversationId_userId: { conversationId: id, userId: ctx.userId } }, data: { lastReadAt: now } });
       return m;
     });
-    return this.prisma.chatMessage.findUnique({ where: { id: msg.id }, include: { sender: userSelect, files: fileSelect } });
+    const full = await this.prisma.chatMessage.findUnique({ where: { id: msg.id }, include: { sender: userSelect, files: fileSelect } });
+    // Push на телефоны остальных участников — в фоне, ответ отправителю не ждёт.
+    setImmediate(() => this.notify(id, ctx.userId, full!).catch((e) => this.log.warn(e instanceof Error ? e.message : String(e))));
+    return full;
+  }
+
+  /**
+   * Push о новом сообщении (мобильное приложение). В колокольчик не пишется — у чата свой счётчик непрочитанных.
+   * Состав чата группы сверяется перед отправкой: новые студенты группы тоже получают уведомление.
+   */
+  private async notify(conversationId: string, senderId: string, msg: { text: string | null; sender: { firstName: string; lastName: string } | null; files: { mime: string }[] }) {
+    const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+    if (!conv) return;
+    if (conv.groupId) await this.syncGroups([conv.groupId]);
+    const members = await this.prisma.conversationMember.findMany({ where: { conversationId, userId: { not: senderId } }, select: { userId: true } });
+    const who = msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : '';
+    const title = conv.type === 'group' && conv.title ? `${conv.title}: ${who}` : who;
+    const body = msg.text?.slice(0, 200) || (msg.files.some((f) => f.mime.startsWith('audio/')) ? '🎙 Голосовое сообщение' : '📎 Файл');
+    for (const m of members) await pushToUser(this.prisma, m.userId, { title, body, data: { type: 'chat', conversationId } });
   }
 
   @Post('conversations/:id/read')
