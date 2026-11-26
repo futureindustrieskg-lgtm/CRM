@@ -6,6 +6,7 @@ import { FileList, FilePicker, VoiceRecorder } from '../files';
 import { useI18n } from '../i18n';
 import { ErrorText, fmtDate, Modal } from '../ui';
 import { isOverdue, mmss, StatusBadge } from './Homework';
+import { MyLessons } from './Integrations';
 import { TestRunner } from './TestRun';
 
 interface MyHw {
@@ -48,6 +49,7 @@ export function MyHomeworkPage() {
         </div>
       </div>
       <ErrorText error={q.error} />
+      <MyLessons />
       <div style={{ maxWidth: 760 }}>
         {rows.map((h) => (
           <HomeworkCard key={h.id} h={h} />

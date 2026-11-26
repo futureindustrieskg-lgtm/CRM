@@ -7,8 +7,9 @@ import { CoursesPage, RoomsPage } from './pages/Courses';
 import { DashboardPage } from './pages/Dashboard';
 import { FinancePage } from './pages/Finance';
 import { ChatPage, useChatUnread } from './pages/Chat';
-import { CompanyPage, DocumentsPage } from './pages/Documents';
+import { CompanyPage, DocumentsPage, TemplatesPage } from './pages/Documents';
 import { ReportsPage } from './pages/Reports';
+import { IntegrationsPage, PayPage } from './pages/Integrations';
 import { GroupsPage } from './pages/Groups';
 import { NotificationBell, NotificationsPage } from './pages/Notifications';
 import { HomeworkPage } from './pages/Homework';
@@ -28,6 +29,7 @@ export function App() {
   const { me, loading } = useAuth();
   const loc = useLocation();
   // Тест по ссылке проходят без входа (лиды, гости).
+  if (loc.pathname.startsWith('/pay/')) return <Routes><Route path="/pay/:token" element={<PayPage />} /></Routes>;
   if (loc.pathname.startsWith('/test/a/')) return <Routes><Route path="/test/a/:token" element={<PublicAttemptPage />} /></Routes>;
   if (loc.pathname.startsWith('/test/')) return <Routes><Route path="/test/:token" element={<PublicTestPage />} /></Routes>;
   if (loading) return <div className="login-page muted">…</div>;
@@ -127,6 +129,7 @@ function Layout() {
     { to: '/learning-rules', label: t('learningRules'), show: can('branches.update') },
     { to: '/notifications', label: t('notifications'), show: can('messages.update') },
     { to: '/company', label: t('companyTitle'), show: can('branches.update') },
+    { to: '/integrations', label: t('integrations'), show: can('branches.update') },
     { to: '/audit', label: t('audit'), show: can('audit.read') },
   ].filter((n) => n.show);
 
@@ -186,7 +189,9 @@ function Layout() {
             <Route path="/my/homework" element={<MyHomeworkPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
+            <Route path="/documents/templates" element={<TemplatesPage />} />
             <Route path="/company" element={<CompanyPage />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:id" element={<ChatPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

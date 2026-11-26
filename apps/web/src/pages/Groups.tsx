@@ -208,6 +208,7 @@ function GroupForm({ group, onDone }: { group?: GroupFull; onDone: (id?: string)
     maxStudents: group?.maxStudents ?? 12,
     startDate: group?.startDate?.slice(0, 10) ?? '',
     status: group?.status ?? 'recruiting',
+    onlineUrl: (group as { onlineUrl?: string | null } | undefined)?.onlineUrl ?? '',
     days: group?.scheduleRule?.days ?? [],
     start: group?.scheduleRule?.start ?? '19:00',
     end: group?.scheduleRule?.end ?? '20:30',
@@ -229,6 +230,7 @@ function GroupForm({ group, onDone }: { group?: GroupFull; onDone: (id?: string)
         startDate: f.startDate || null,
         status: f.status,
         scheduleRule: f.days.length ? { days: [...f.days].sort(), start: f.start, end: f.end } : null,
+        onlineUrl: f.onlineUrl.trim() || null,
       };
       return group
         ? api<{ id: string; lessonsUpdated: number }>(`/groups/${group.id}`, { method: 'PATCH', body })
@@ -311,6 +313,9 @@ function GroupForm({ group, onDone }: { group?: GroupFull; onDone: (id?: string)
           <input type="number" min={1} value={f.maxStudents} onChange={(e) => setF({ ...f, maxStudents: Number(e.target.value) })} />
         </Field>
       </div>
+      <Field label={t('groupOnlineUrl')}>
+        <input type="url" placeholder="https://zoom.us/j/…" value={f.onlineUrl} onChange={(e) => setF({ ...f, onlineUrl: e.target.value })} />
+      </Field>
       <h3 style={{ marginTop: 8 }}>{t('scheduleRule')}</h3>
       <div className="row" style={{ alignItems: 'flex-end', marginBottom: 12 }}>
         <div>

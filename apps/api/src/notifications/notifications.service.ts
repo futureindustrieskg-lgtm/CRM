@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { OnlineMeetingService } from '../integrations/online';
 import { PrismaService } from '../prisma/prisma.service';
 import { CENTER_TZ, localDate, zonedToUtc } from '../schedule/time';
 import { Address, Channel, hasAddress, isAvailable, send } from './channels';
@@ -52,7 +53,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private online: OnlineMeetingService,
+  ) {}
 
   onModuleInit() {
     if (process.env.NOTIFY_SCHEDULER === '0') return;
@@ -260,7 +264,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     let n = 0;
     for (const l of lessons) {
       const rs = await this.forStudents('lesson_reminder', l.group.students.map((x) => x.studentId));
-      n += await this.emit('lesson_reminder', rs, { group: l.group.name, ...when(l.startsAt) }, { dedupe: l.id });
+      if (!rs.length) continue;
+      // Онлайн-занятие: ссылка создаётся заранее и приходит в напоминании.
+      const url = await this.online.ensureLink(l.id).catch(() => null);
+      n += await this.emit('lesson_reminder', rs, { group: l.group.name, ...when(l.startsAt), link: url ? `Ссылка на урок: ${url}` : '' }, { dedupe: l.id });
     }
     return n;
   }

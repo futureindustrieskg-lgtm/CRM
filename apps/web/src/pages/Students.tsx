@@ -29,6 +29,11 @@ interface Student {
   birthDate: string | null;
   phone: string | null;
   email: string | null;
+  /** Для договоров; скрыты (null) для ролей без права students.contacts. */
+  passport?: string | null;
+  passportIssued?: string | null;
+  regAddress?: string | null;
+  address?: string | null;
   currentLevel: string | null;
   targetLevel: string | null;
   goal: string | null;
@@ -135,7 +140,7 @@ type SForm = Partial<Omit<Student, 'branch' | 'balance'>> & { branchId?: string 
 
 function StudentModal({ initial, onClose, onSaved }: { initial?: StudentFull; onClose: () => void; onSaved: (id: string) => void }) {
   const { t } = useI18n();
-  const { activeRole } = useAuth();
+  const { activeRole, can } = useAuth();
   const branches = useBranches();
   const qc = useQueryClient();
   const [form, setForm] = useState<SForm>(
@@ -146,6 +151,10 @@ function StudentModal({ initial, onClose, onSaved }: { initial?: StudentFull; on
           phone: initial.phone,
           email: initial.email,
           birthDate: initial.birthDate?.slice(0, 10) ?? null,
+          passport: initial.passport,
+          passportIssued: initial.passportIssued,
+          regAddress: initial.regAddress,
+          address: initial.address,
           currentLevel: initial.currentLevel,
           targetLevel: initial.targetLevel,
           goal: initial.goal,
@@ -196,6 +205,22 @@ function StudentModal({ initial, onClose, onSaved }: { initial?: StudentFull; on
           <Field label="Дата рождения">
             <input type="date" value={v('birthDate')} onChange={inp('birthDate')} />
           </Field>
+          {(!initial || can('students.contacts')) && (
+            <>
+              <Field label={t('passport')}>
+                <input value={v('passport')} onChange={inp('passport')} />
+              </Field>
+              <Field label={t('passportIssued')}>
+                <input value={v('passportIssued')} onChange={inp('passportIssued')} />
+              </Field>
+              <Field label={t('regAddress')}>
+                <input value={v('regAddress')} onChange={inp('regAddress')} />
+              </Field>
+              <Field label={t('liveAddress')}>
+                <input value={v('address')} onChange={inp('address')} />
+              </Field>
+            </>
+          )}
           {!activeRole?.branchId && (
             <Field label={t('branch') + ' *'}>
               <select value={v('branchId')} onChange={inp('branchId')}>
@@ -276,6 +301,24 @@ function StudentDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             <dd>{s.email ?? '—'}</dd>
             <dt>Дата рождения</dt>
             <dd>{fmtDate(s.birthDate, false)}</dd>
+            {s.passport && (
+              <>
+                <dt>{t('passport')}</dt>
+                <dd>
+                  {s.passport}
+                  {s.passportIssued && <span className="muted"> · {s.passportIssued}</span>}
+                </dd>
+              </>
+            )}
+            {(s.address || s.regAddress) && (
+              <>
+                <dt>{t('liveAddress')}</dt>
+                <dd>
+                  {s.address ?? s.regAddress}
+                  {s.regAddress && s.address && s.regAddress !== s.address && <div className="muted">{t('regAddress')}: {s.regAddress}</div>}
+                </dd>
+              </>
+            )}
             <dt>{t('branch')}</dt>
             <dd>{s.branch.name}</dd>
             <dt>{t('level')}</dt>

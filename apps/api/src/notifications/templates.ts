@@ -15,7 +15,7 @@ export interface TypeRule {
 }
 
 export const NOTIFICATION_TYPES: Record<string, { name: string; rule: TypeRule; vars: string[] }> = {
-  lesson_reminder: { name: 'Напоминание о занятии', rule: { enabled: true, channels: ['push', 'telegram', 'whatsapp', 'sms'], parents: false }, vars: ['name', 'group', 'date', 'time'] },
+  lesson_reminder: { name: 'Напоминание о занятии', rule: { enabled: true, channels: ['push', 'telegram', 'whatsapp', 'sms'], parents: false }, vars: ['name', 'group', 'date', 'time', 'link'] },
   lesson_changed: { name: 'Перенос или отмена занятия', rule: { enabled: true, channels: ['push', 'whatsapp', 'sms'], parents: true }, vars: ['name', 'student', 'group', 'date', 'time', 'reason'] },
   homework_new: { name: 'Новое домашнее задание', rule: { enabled: true, channels: ['push', 'telegram'], parents: false }, vars: ['name', 'title', 'group', 'date'] },
   homework_checked: { name: 'ДЗ проверено / на доработке', rule: { enabled: true, channels: ['push', 'telegram'], parents: false }, vars: ['name', 'title', 'grade', 'reason'] },
@@ -32,8 +32,8 @@ type Tpl = { title: string; body: string };
 
 export const DEFAULT_TEMPLATES: Record<string, { ru: Tpl; ky: Tpl }> = {
   lesson_reminder: {
-    ru: { title: 'Скоро занятие', body: '{{name}}, напоминаем: занятие группы «{{group}}» сегодня в {{time}}.' },
-    ky: { title: 'Жакында сабак', body: '{{name}}, эскертебиз: «{{group}}» тобунун сабагы бүгүн саат {{time}}да.' },
+    ru: { title: 'Скоро занятие', body: '{{name}}, напоминаем: занятие группы «{{group}}» сегодня в {{time}}. {{link}}' },
+    ky: { title: 'Жакында сабак', body: '{{name}}, эскертебиз: «{{group}}» тобунун сабагы бүгүн саат {{time}}да. {{link}}' },
   },
   lesson_changed: {
     ru: { title: 'Изменение в расписании', body: '{{name}}, занятие группы «{{group}}»: {{reason}}. Новое время: {{date}} {{time}}.' },

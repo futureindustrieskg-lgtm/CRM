@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import { addDays, addMonths, dayOfMonth, labelDate, mondayOf, monthOf, weekday, zDate, zonedToUtc, zparts, zTime } from '../tz';
 import { ErrorText, Field, fmtDate, fmtTime, Modal } from '../ui';
 import { useRooms } from './Courses';
+import { OnlineLink } from './Integrations';
 import { AttendanceModal } from './Journal';
 import { useGroups, useTeachers } from './Groups';
 import { useBranches } from './Leads';
@@ -18,6 +19,7 @@ export interface Lesson {
   endsAt: string;
   status: string;
   topic: string | null;
+  onlineUrl?: string | null;
   teacherId: string | null;
   roomId: string | null;
   teacher: { id: string; firstName: string; lastName: string } | null;
@@ -393,6 +395,7 @@ export function LessonModal({ lesson, onClose, onGroup }: { lesson: Lesson; onCl
           {fmtDate(lesson.startsAt, false)} {fmtTime(s)}–{fmtTime(e)}
         </span>
         {lesson.group?.course && <span className="muted">{lesson.group.course.name}</span>}
+        {lesson.status !== 'cancelled' && <OnlineLink lessonId={lesson.id} url={lesson.onlineUrl ?? null} />}
         {can('attendance.read') && lesson.status !== 'cancelled' && (
           <button type="button" className="small" style={{ marginLeft: 'auto' }} onClick={() => setJournal(true)}>
             {t('journal')}

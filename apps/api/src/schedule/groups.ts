@@ -24,6 +24,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   Min,
   ValidateIf,
@@ -32,6 +33,7 @@ import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
 import { hasPermission } from '../common/permissions';
 import { FinanceService } from '../finance/finance.service';
+import { WebhooksService } from '../integrations/webhooks';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictService } from './conflicts';
 import { generateSlots, hoursPerLesson, localDate, ScheduleRule, validateRule, zonedToUtc } from './time';
@@ -160,6 +162,11 @@ class GroupCreateDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(100) maxStudents?: number;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @ValidateIf((_, v) => v !== null) @IsDateString() startDate?: string | null;
   @ApiPropertyOptional({ enum: GROUP_STATUSES }) @IsOptional() @IsIn(GROUP_STATUSES) status?: string;
+  @ApiPropertyOptional({ nullable: true, description: 'Постоянная ссылка Zoom/Meet для онлайн-группы' })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUrl({ require_protocol: true, protocols: ['https'] })
+  onlineUrl?: string | null;
   @ApiPropertyOptional({ type: ScheduleRuleDto, nullable: true })
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
@@ -228,6 +235,7 @@ export class GroupsController {
     private audit: AuditService,
     private conflicts: ConflictService,
     private finance: FinanceService,
+    private webhooks: WebhooksService,
   ) {}
 
   @Get()
@@ -646,6 +654,7 @@ export class GroupsController {
       await this.audit.log({ userId: ctx.userId, entity: 'group', entityId: g.id, action: 'add_student', after: { studentId, waitlist } });
     }
     if (!waitlist) await this.notifyMinimum(ctx, g);
+    if (!waitlist) await this.webhooks.emit('student.enrolled', { studentId, groupId: g.id, groupName: g.name, branchId: g.branchId });
     return { ok: true, waitlist };
   }
 

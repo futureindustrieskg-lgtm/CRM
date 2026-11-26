@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
-import { IsDateString, IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuditService } from '../audit/audit';
 import { normalizePhone } from '../auth/auth';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
@@ -31,6 +31,10 @@ class StudentFields {
   @ApiPropertyOptional({ enum: LEVELS }) @IsOptional() @IsIn(LEVELS) targetLevel?: string;
   @ApiPropertyOptional({ enum: GOALS }) @IsOptional() @IsIn(GOALS) goal?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() preferredTime?: string;
+  @ApiPropertyOptional({ description: 'Паспорт: серия и номер' }) @IsOptional() @IsString() @MaxLength(50) passport?: string;
+  @ApiPropertyOptional({ description: 'Кем и когда выдан' }) @IsOptional() @IsString() @MaxLength(200) passportIssued?: string;
+  @ApiPropertyOptional({ description: 'Адрес прописки' }) @IsOptional() @IsString() @MaxLength(300) regAddress?: string;
+  @ApiPropertyOptional({ description: 'Фактический адрес' }) @IsOptional() @IsString() @MaxLength(300) address?: string;
   @ApiPropertyOptional({ enum: STUDENT_STATUSES }) @IsOptional() @IsIn(STUDENT_STATUSES) status?: string;
 }
 
@@ -58,7 +62,8 @@ class StudentQueryDto {
 /** Контакты скрываются от ролей без права students.contacts (например, преподаватель — ТЗ 2). */
 function maskContacts<T extends { phone: string | null; email: string | null }>(ctx: RequestContext, s: T): T {
   if (hasPermission(ctx.permissions, 'students.contacts')) return s;
-  return { ...s, phone: null, email: null };
+  // Паспорт и адреса — те же персональные данные, что и контакты.
+  return { ...s, phone: null, email: null, passport: null, passportIssued: null, regAddress: null, address: null };
 }
 
 @ApiTags('students')

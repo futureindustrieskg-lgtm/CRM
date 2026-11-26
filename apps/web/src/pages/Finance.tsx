@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import { zDate, zonedToUtc } from '../tz';
 import { EnumSelect, ErrorText, Field, fmtDate, fmtMoney, Modal } from '../ui';
 import { useCourses } from './Courses';
+import { PaymentLinkButton } from './Integrations';
 import { useBranches } from './Leads';
 
 export const PAY_METHODS = ['cash', 'transfer', 'qr', 'card_online'];
@@ -613,6 +614,7 @@ export function StudentFinance({ student }: { student: Parameters<typeof SellSub
             <button className="small" onClick={() => setPay(true)}>
               + {t('newPayment')}
             </button>
+            <PaymentLinkButton studentId={student.id} balance={balance} />
             <button className="small primary" onClick={() => setSell(true)} disabled={!student.groups.some((g) => !g.leftAt)}>
               + {t('sellSubscription')}
             </button>

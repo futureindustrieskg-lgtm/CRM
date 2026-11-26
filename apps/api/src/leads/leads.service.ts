@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit';
 import { normalizePhone } from '../auth/auth';
 import { RequestContext } from '../common/context';
 import { hasPermission } from '../common/permissions';
+import { WebhooksService } from '../integrations/webhooks';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadCreateDto, LeadQueryDto, LeadUpdateDto } from './leads.dto';
 
@@ -21,6 +22,7 @@ export class LeadsService {
     private prisma: PrismaService,
     private audit: AuditService,
     private config: ConfigService,
+    private webhooks: WebhooksService,
   ) {}
 
   /**
@@ -141,6 +143,7 @@ export class LeadsService {
     }
 
     await this.audit.log({ userId: ctx?.userId, entity: 'lead', entityId: lead.id, action: 'create', after: lead });
+    await this.webhooks.emit('lead.created', { leadId: lead.id, firstName: lead.firstName, lastName: lead.lastName, phone: lead.phone, email: lead.email, source: lead.source, branchId: lead.branchId, utmSource: lead.utmSource, utmCampaign: lead.utmCampaign });
     return { ...lead, duplicates: dups };
   }
 
@@ -269,6 +272,7 @@ export class LeadsService {
     const won = await this.prisma.pipelineStage.findFirst({ where: { isWon: true } });
     if (won) await this.moveStage(ctx, id, won.id);
     await this.audit.log({ userId: ctx.userId, entity: 'student', entityId: student.id, action: 'create', after: student });
+    await this.webhooks.emit('lead.converted', { leadId: id, studentId: student.id, branchId: student.branchId });
     return student;
   }
 

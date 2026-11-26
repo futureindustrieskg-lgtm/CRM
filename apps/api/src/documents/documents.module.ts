@@ -26,11 +26,12 @@ import { CENTER_TZ } from '../schedule/time';
 import { Company, CompanyController, CompanyService, genitive, shortName } from './company';
 import { createDoc, Doc, finish, footer, heading, leftRight, para, table, title, twoColumns } from './pdf';
 import { amountInWords, plural } from './words';
+import { CUSTOM_NEXT_KEY, DocumentTemplatesController, fill, renderText, templateVars } from './templates';
 
-export const DOC_TYPES = ['contract', 'invoice', 'act', 'reference', 'certificate'] as const;
+export const DOC_TYPES = ['contract', 'invoice', 'act', 'reference', 'certificate', 'custom', 'custom_act'] as const;
 type DocType = (typeof DOC_TYPES)[number];
-const PREFIX: Record<DocType, string> = { contract: 'Д', invoice: 'С', act: 'А', reference: 'СП', certificate: 'СТ' };
-const NAMES: Record<DocType, string> = { contract: 'Договор', invoice: 'Счёт на оплату', act: 'Акт оказанных услуг', reference: 'Справка об обучении', certificate: 'Сертификат' };
+const PREFIX: Record<DocType, string> = { contract: 'Д', invoice: 'С', act: 'А', reference: 'СП', certificate: 'СТ', custom: '', custom_act: '' };
+const NAMES: Record<DocType, string> = { contract: 'Договор', invoice: 'Счёт на оплату', act: 'Акт оказанных услуг', reference: 'Справка об обучении', certificate: 'Сертификат', custom: 'Договор', custom_act: 'Акт' };
 const SUB_TYPES: Record<string, string> = { month: 'помесячный', level: 'за уровень', package: 'пакет занятий', installment: 'в рассрочку' };
 const PROVIDERS = ['goethe', 'telc', 'osd', 'testdaf'] as const;
 const PROVIDER_NAMES: Record<string, string> = { goethe: 'Goethe-Zertifikat', telc: 'telc', osd: 'ÖSD', testdaf: 'TestDaF' };
@@ -54,6 +55,8 @@ class IssueDto {
   @IsNumber()
   @Min(0.01)
   amount?: number;
+  @ApiPropertyOptional({ description: 'Договор по шаблону (type = custom)' }) @IsOptional() @IsString() templateId?: string;
+  @ApiPropertyOptional({ description: 'Акт к договору по шаблону (type = custom_act)' }) @IsOptional() @IsString() parentId?: string;
 }
 
 class ExamDto {
@@ -66,7 +69,7 @@ class ExamDto {
 }
 class ExamUpdateDto extends PartialType(ExamDto) {}
 
-type IssuedRow = { id: string; type: string; number: string; createdAt: Date; studentId: string; subscriptionId: string | null; groupId: string | null; amount: Prisma.Decimal | null };
+type IssuedRow = { id: string; type: string; number: string; createdAt: Date; studentId: string; subscriptionId: string | null; groupId: string | null; amount: Prisma.Decimal | null; templateId: string | null; parentId: string | null };
 
 @ApiTags('documents')
 @ApiBearerAuth()
@@ -95,6 +98,7 @@ export class DocumentsController {
   @Post()
   @RequirePermissions('documents.create')
   async issue(@Ctx() ctx: RequestContext, @Body() dto: IssueDto) {
+    if (dto.type === 'custom' || dto.type === 'custom_act') return this.issueCustom(ctx, dto);
     let studentId = dto.studentId;
     let amount: number | undefined;
     if (['contract', 'invoice', 'act'].includes(dto.type)) {
@@ -153,6 +157,82 @@ export class DocumentsController {
     throw new BadRequestException('Не удалось присвоить номер, повторите');
   }
 
+  /**
+   * Договор по шаблону: общая сквозная нумерация (продолжение бумажных номеров), сумма — из шаблона или указанная.
+   * Акт к нему получает номер договора и выдаётся один раз.
+   */
+  private async issueCustom(ctx: RequestContext, dto: IssueDto) {
+    if (dto.type === 'custom_act') {
+      if (!dto.parentId) throw new BadRequestException('Укажите договор');
+      const parent = await this.prisma.issuedDocument.findFirst({ where: { id: dto.parentId, type: 'custom', student: branchScope(ctx) } });
+      if (!parent) throw new NotFoundException('Договор не найден');
+      const tpl = parent.templateId ? await this.prisma.documentTemplate.findUnique({ where: { id: parent.templateId } }) : null;
+      if (!tpl?.actBody?.trim()) throw new BadRequestException('В шаблоне договора нет текста акта');
+      const existing = await this.prisma.issuedDocument.findFirst({ where: { type: 'custom_act', parentId: parent.id } });
+      if (existing) return existing;
+      const act = await this.prisma.issuedDocument.create({
+        data: { type: 'custom_act', year: 0, seq: parent.seq, number: `${parent.number}-А`, studentId: parent.studentId, templateId: parent.templateId, parentId: parent.id, amount: parent.amount, createdById: ctx.userId },
+      });
+      await this.audit.log({ userId: ctx.userId, entity: 'document', entityId: act.id, action: 'issue', after: act });
+      return act;
+    }
+    if (!dto.templateId || !dto.studentId) throw new BadRequestException('Укажите шаблон и клиента');
+    const [tpl, student] = await Promise.all([
+      this.prisma.documentTemplate.findFirst({ where: { id: dto.templateId, isActive: true } }),
+      this.prisma.student.findFirst({ where: { id: dto.studentId, ...branchScope(ctx) } }),
+    ]);
+    if (!tpl) throw new NotFoundException('Шаблон не найден');
+    if (!student) throw new NotFoundException('Клиент не найден');
+    const amount = dto.amount ?? (tpl.defaultPrice ? Number(tpl.defaultPrice) : undefined);
+    if (!amount) throw new BadRequestException('Укажите стоимость услуг');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const [setting, last] = await Promise.all([
+        this.prisma.setting.findUnique({ where: { key: CUSTOM_NEXT_KEY } }),
+        this.prisma.issuedDocument.findFirst({ where: { type: 'custom' }, orderBy: { seq: 'desc' } }),
+      ]);
+      const seq = Math.max(Number(setting?.value ?? 1), (last?.seq ?? 0) + 1);
+      try {
+        const doc = await this.prisma.issuedDocument.create({
+          data: { type: 'custom', year: 0, seq, number: String(seq), studentId: student.id, templateId: tpl.id, amount, createdById: ctx.userId },
+        });
+        await this.audit.log({ userId: ctx.userId, entity: 'document', entityId: doc.id, action: 'issue', after: { ...doc, template: tpl.name } });
+        return doc;
+      } catch (e) {
+        if ((e as { code?: string }).code !== 'P2002') throw e;
+      }
+    }
+    throw new BadRequestException('Не удалось присвоить номер, повторите');
+  }
+
+  /** Договор / акт по шаблону: подстановка полей и вёрстка текста. */
+  private async custom(row: IssuedRow, c: Company) {
+    const tpl = row.templateId ? await this.prisma.documentTemplate.findUnique({ where: { id: row.templateId } }) : null;
+    if (!tpl) throw new NotFoundException('Шаблон документа удалён');
+    const client = await this.prisma.student.findUniqueOrThrow({ where: { id: row.studentId } });
+    const parent = row.parentId ? await this.prisma.issuedDocument.findUnique({ where: { id: row.parentId } }) : null;
+    const vars = templateVars({
+      number: parent?.number ?? row.number,
+      date: row.createdAt,
+      price: Number(row.amount ?? tpl.defaultPrice ?? 0),
+      company: c,
+      client,
+      contract: parent ? { number: parent.number, date: parent.createdAt } : undefined,
+    });
+    const text = fill(row.type === 'custom_act' ? tpl.actBody ?? '' : tpl.body, vars);
+    const doc = createDoc({ title: `${row.type === 'custom_act' ? 'Акт' : 'Договор'} ${row.number}` });
+    renderText(doc, text);
+    footer(doc, `${row.type === 'custom_act' ? 'Акт к договору' : 'Договор'} № ${parent?.number ?? row.number} · ${c.name}`);
+    return finish(doc);
+  }
+
+  /** Названия шаблонов для реестра и выдачи. */
+  @Get('template-names')
+  @RequirePermissions('documents.read')
+  async templateNames() {
+    const r = await this.prisma.documentTemplate.findMany({ select: { id: true, name: true, actBody: true, defaultPrice: true, isActive: true }, orderBy: { name: 'asc' } });
+    return r.map((t) => ({ id: t.id, name: t.name, hasAct: !!t.actBody?.trim(), defaultPrice: t.defaultPrice, isActive: t.isActive }));
+  }
+
   /** PDF выданного документа (по данным на сейчас, с номером и датой выдачи). */
   @Get(':id/pdf')
   @RequirePermissions('documents.read')
@@ -179,6 +259,9 @@ export class DocumentsController {
         return this.reference(row, c);
       case 'certificate':
         return this.certificate(row, c);
+      case 'custom':
+      case 'custom_act':
+        return this.custom(row, c);
     }
   }
 
@@ -494,7 +577,7 @@ export { PROVIDER_NAMES };
 
 @Module({
   imports: [LearningModule],
-  controllers: [CompanyController, DocumentsController, ExamsController],
+  controllers: [CompanyController, DocumentsController, ExamsController, DocumentTemplatesController],
   providers: [CompanyService],
   exports: [CompanyService],
 })

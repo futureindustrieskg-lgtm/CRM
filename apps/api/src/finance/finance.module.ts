@@ -32,7 +32,8 @@ import {
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
 import { hasPermission } from '../common/permissions';
-import { fmtSom, NotificationsService } from '../notifications/notifications.service';
+import { FiscalService, PaymentLinksService } from '../integrations/payments';
+import { WebhooksService } from '../integrations/webhooks';
 import { PrismaService } from '../prisma/prisma.service';
 import { CENTER_TZ, localDate, zonedToUtc } from '../schedule/time';
 import { FinanceService, PayrollSettings, subscriptionLessonPrice, TEACHER_CATEGORIES } from './finance.service';
@@ -134,7 +135,12 @@ class CancelSubscriptionDto {
 @ApiBearerAuth()
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private prisma: PrismaService, private audit: AuditService, private finance: FinanceService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private finance: FinanceService,
+    private webhooks: WebhooksService,
+  ) {}
 
   @Get()
   @RequirePermissions('finance.read')
@@ -214,6 +220,7 @@ export class SubscriptionsController {
     }
     const balance = await this.finance.recalcBalance(student.id);
     await this.audit.log({ userId: ctx.userId, entity: 'subscription', entityId: sub.id, action: 'create', after: sub });
+    await this.webhooks.emit('subscription.created', { subscriptionId: sub.id, studentId: sub.studentId, courseId: sub.courseId, groupId: sub.groupId, price: Number(sub.price), lessons: sub.lessonsTotal });
     return { ...sub, balance };
   }
 
@@ -294,7 +301,8 @@ export class PaymentsController {
     private prisma: PrismaService,
     private audit: AuditService,
     private finance: FinanceService,
-    private notifications: NotificationsService,
+    private links: PaymentLinksService,
+    private fiscal: FiscalService,
   ) {}
 
   @Get()
@@ -352,11 +360,9 @@ export class PaymentsController {
     });
     const balance = await this.finance.recalcBalance(student.id);
     await this.audit.log({ userId: ctx.userId, entity: 'payment', entityId: p.id, action: refund ? 'refund' : 'create', after: p });
-    if (!refund) {
-      // «Оплата получена» студенту и родителю-плательщику (ТЗ 3.8).
-      const rs = await this.notifications.forStudents('payment_received', [student.id]);
-      await this.notifications.emit('payment_received', rs, { amount: fmtSom(dto.amount), balance: fmtSom(balance) }, { dedupe: p.id });
-    }
+    // Оплата: уведомление, webhook и фискальный чек; возврат — только чек возврата.
+    if (!refund) await this.links.afterPayment(p.id, student.id, dto.amount, balance);
+    else await this.fiscal.issue(p.id);
     return { ...p, balance };
   }
 

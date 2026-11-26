@@ -20,6 +20,8 @@ export interface Company {
   directorGenitive: string;
   /** На основании чего действует директор. */
   basis: string;
+  /** Свидетельство о регистрации (для договоров «действующее на основании …»). */
+  registration: string;
   address: string;
   city: string;
   inn: string;
@@ -40,6 +42,7 @@ export const COMPANY_DEFAULTS: Company = {
   directorPositionGenitive: '',
   directorGenitive: '',
   basis: 'Устава',
+  registration: '',
   address: '',
   city: '',
   inn: '',
@@ -118,6 +121,7 @@ class CompanyDto implements Partial<Company> {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(150) directorPositionGenitive?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) directorGenitive?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) basis?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) registration?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) address?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) city?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) inn?: string;
@@ -147,7 +151,15 @@ export class CompanyController {
   @RequirePermissions('branches.update')
   async save(@Ctx() ctx: RequestContext, @Body() dto: CompanyDto) {
     const before = await this.company.get();
-    const value = { ...before, ...Object.fromEntries(Object.entries(dto).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v])) };
+    // Только переданные поля: незаполненные свойства DTO (undefined) не должны стирать сохранённые реквизиты.
+    const value = {
+      ...before,
+      ...Object.fromEntries(
+        Object.entries(dto)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v]),
+      ),
+    };
     await this.prisma.setting.upsert({ where: { key: 'company' }, create: { key: 'company', value }, update: { value } });
     await this.audit.log({ userId: ctx.userId, entity: 'settings', entityId: 'company', action: 'update', before, after: value });
     return value;

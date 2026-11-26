@@ -214,24 +214,29 @@ model Task {
 // ───────────── 3.2 Клиенты и студенты ─────────────
 
 model Student {
-  id            String    @id @default(uuid())
-  userId        String?   @unique
-  leadId        String?   @unique
-  branchId      String
-  firstName     String
-  lastName      String
-  birthDate     DateTime?
-  phone         String?
-  email         String?
-  currentLevel  String?
-  targetLevel   String?
-  goal          String?
-  preferredTime String?
-  status        String    @default("active") // active | paused | finished | left
-  balance       Decimal   @default(0) @db.Decimal(12, 2)
-  consentAt     DateTime? // согласие на обработку ПД
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  userId         String?   @unique
+  leadId         String?   @unique
+  branchId       String
+  firstName      String
+  lastName       String
+  birthDate      DateTime?
+  phone          String?
+  email          String?
+  currentLevel   String?
+  targetLevel    String?
+  goal           String?
+  preferredTime  String?
+  status         String    @default("active") // active | paused | finished | left
+  balance        Decimal   @default(0) @db.Decimal(12, 2)
+  consentAt      DateTime? // согласие на обработку ПД
+  /// Для договоров: паспорт (серия и номер), кем и когда выдан, адрес прописки и фактический.
+  passport       String?
+  passportIssued String?
+  regAddress     String?
+  address        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user          User?                @relation(fields: [userId], references: [id])
   lead          Lead?                @relation(fields: [leadId], references: [id])
@@ -245,6 +250,7 @@ model Student {
   subscriptions Subscription[]
   homework      Homework[]           @relation("HomeworkStudent")
   documents     IssuedDocument[]
+  paymentLinks  PaymentLink[]
   exams         ExternalExam[]
   testAttempts  TestAttempt[]
 
@@ -308,6 +314,8 @@ model Group {
   endDate      DateTime?
   status       String    @default("recruiting") // recruiting | running | finished
   scheduleRule Json? // {"days":[1,3,5],"start":"19:00","end":"20:30"}
+  /// Постоянная ссылка на онлайн-занятия группы (Zoom/Meet); пусто — создаётся на каждое занятие.
+  onlineUrl    String?
 
   branch        Branch         @relation(fields: [branchId], references: [id])
   course        Course         @relation(fields: [courseId], references: [id])
@@ -684,6 +692,9 @@ model Payment {
   student      Student       @relation(fields: [studentId], references: [id])
   subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
+  fiscalReceipt FiscalReceipt?
+  paymentLink   PaymentLink?
+
   @@index([paidAt])
 }
 
@@ -755,6 +766,10 @@ model IssuedDocument {
   subscriptionId String?
   groupId        String?
   amount         Decimal? @db.Decimal(12, 2)
+  /// Договор по шаблону из базы (type = custom / custom_act).
+  templateId     String?
+  /// Для акта — договор, к которому он составлен.
+  parentId       String?
   createdById    String?
   createdAt      DateTime @default(now())
 
@@ -783,4 +798,96 @@ model ExternalExam {
 
   @@index([studentId])
   @@index([date])
+}
+
+// ───────────── 5. Интеграции ─────────────
+
+/// Подписка внешнего сервиса на события CRM (исходящие webhook-и, ТЗ 5).
+model WebhookEndpoint {
+  id          String   @id @default(uuid())
+  url         String
+  /// Секрет для подписи HMAC-SHA256 (заголовок X-CRM-Signature).
+  secret      String
+  /// lead.created | lead.converted | payment.received | student.enrolled | subscription.created
+  events      String[]
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id            String    @id @default(uuid())
+  endpointId    String
+  event         String
+  payload       Json
+  /// pending | sent | failed
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  responseCode  Int?
+  error         String?
+  nextAttemptAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  sentAt        DateTime?
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+}
+
+/// Ссылка на онлайн-оплату (эквайринг / QR банка): после оплаты деньги зачисляются автоматически.
+model PaymentLink {
+  id             String    @id @default(uuid())
+  token          String    @unique
+  studentId      String
+  branchId       String
+  subscriptionId String?
+  amount         Decimal   @db.Decimal(12, 2)
+  description    String
+  /// pending | paid | cancelled | expired
+  status         String    @default("pending")
+  provider       String?
+  providerRef    String?
+  paymentId      String?   @unique
+  expiresAt      DateTime
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  paidAt         DateTime?
+
+  student Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, status])
+}
+
+/// Фискальный чек онлайн-кассы (ЭКМ, ГНС КР) по оплате.
+model FiscalReceipt {
+  id           String    @id @default(uuid())
+  paymentId    String    @unique
+  /// pending | sent | simulated | failed
+  status       String    @default("pending")
+  provider     String?
+  fiscalNumber String?
+  error        String?
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+  sentAt       DateTime?
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+/// Шаблон договора, редактируемый в CRM (консультационные услуги, FerienJob и др.).
+/// Текст с полями подстановки {{client.name}}, {{price}}, {{company.inn}}… — см. documents/templates.ts.
+model DocumentTemplate {
+  id           String   @id @default(uuid())
+  name         String
+  body         String
+  /// Текст акта к договору (необязательно).
+  actBody      String?
+  defaultPrice Decimal? @db.Decimal(12, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
