@@ -119,6 +119,63 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+export interface FileRef {
+  id: string;
+  name: string;
+  mime: string;
+  size?: number;
+}
+
+/** Файл с телефона: uri (камера, галерея, документ, запись) или Blob в веб-сборке. */
+export interface LocalFile {
+  uri: string;
+  name: string;
+  mime: string;
+  blob?: Blob;
+}
+
+/** Загрузка файла (до 20 МБ) — возвращает id для прикрепления к сдаче ДЗ. */
+export async function uploadFile(f: LocalFile, retry = true): Promise<FileRef> {
+  const fd = new FormData();
+  if (Platform.OS === 'web') {
+    const blob = f.blob ?? (await (await fetch(f.uri)).blob());
+    fd.append('file', blob, f.name);
+  } else {
+    // React Native: файл передаётся объектом { uri, name, type } — читается с диска при отправке.
+    fd.append('file', { uri: f.uri, name: f.name, type: f.mime } as unknown as Blob);
+  }
+  const headers: Record<string, string> = {};
+  if (memory?.accessToken) headers.Authorization = `Bearer ${memory.accessToken}`;
+  if (memory?.activeRoleId) headers['X-Active-Role'] = memory.activeRoleId;
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/files`, { method: 'POST', headers, body: fd });
+  } catch {
+    throw new NetworkError('Нет связи с сервером');
+  }
+  if (res.status === 401 && retry && (await tryRefresh())) return uploadFile(f, false);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.message ?? res.statusText);
+  return data as FileRef;
+}
+
+/**
+ * Источник для защищённого файла (фото, аудио задания): на телефоне — uri с заголовком авторизации,
+ * в веб-сборке — временная ссылка на скачанный Blob (браузер не передаёт заголовки в <img>/<audio>).
+ */
+export async function fileSource(id: string): Promise<{ uri: string; headers?: Record<string, string> }> {
+  const headers: Record<string, string> = {};
+  if (memory?.accessToken) headers.Authorization = `Bearer ${memory.accessToken}`;
+  if (memory?.activeRoleId) headers['X-Active-Role'] = memory.activeRoleId;
+  if (Platform.OS !== 'web') return { uri: `${API_URL}/files/${id}`, headers };
+  const res = await fetch(`${API_URL}/files/${id}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, 'Файл недоступен');
+  return { uri: URL.createObjectURL(await res.blob()) };
+}
+
+/** Медиа вопроса теста: доступ по токену попытки, без входа. */
+export const testFileUri = (id: string, token: string) => `${API_URL}/public/files/${id}?a=${encodeURIComponent(token)}`;
+
 export async function login(loginValue: string, password: string): Promise<Profile> {
   const d = await api<{ accessToken: string; refreshToken: string; user: Profile }>('/auth/login', { method: 'POST', body: { login: loginValue, password } }, false);
   const role = pickRole(d.user.roles);

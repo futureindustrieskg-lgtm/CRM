@@ -13,6 +13,7 @@ import { registerForPush, unregisterPush } from './push';
 import { HomeScreen, HomeworkScreen, ProgressScreen, ScheduleScreen } from './screens/Client';
 import { InboxScreen, LoginScreen, ProfileScreen } from './screens/Common';
 import { JournalScreen, TeacherLessonsScreen } from './screens/Teacher';
+import { TestRunScreen } from './screens/TestRun';
 import { getJson, setJson } from './storage';
 import { Card, Loading, Screen, T, useColors } from './ui';
 
@@ -33,6 +34,7 @@ export default function App() {
   const [roleId, setRoleId] = useState<string | undefined>();
   const [tab, setTab] = useState<Tab>('home');
   const [journal, setJournal] = useState<string | null>(null);
+  const [testToken, setTestToken] = useState<string | null>(null);
   const [pushState, setPushState] = useState<string | null | undefined>(undefined);
   const [unread, setUnread] = useState(0);
 
@@ -47,6 +49,7 @@ export default function App() {
     setProfile(null);
     setRoleId(undefined);
     setJournal(null);
+    setTestToken(null);
   }, []);
 
   // Запуск: язык, сохранённая сессия, офлайн-очередь.
@@ -129,7 +132,9 @@ export default function App() {
           ) : (
             <>
               <View style={{ flex: 1 }}>
-                {journal ? (
+                {testToken ? (
+                  <TestRunScreen token={testToken} onBack={() => setTestToken(null)} />
+                ) : journal ? (
                   <JournalScreen lessonId={journal} onBack={() => setJournal(null)} />
                 ) : current === 'home' ? (
                   <HomeScreen key={role.id} />
@@ -138,7 +143,7 @@ export default function App() {
                 ) : current === 'progress' ? (
                   <ProgressScreen key={role.id} />
                 ) : current === 'homework' ? (
-                  <HomeworkScreen />
+                  <HomeworkScreen key={testToken ?? 'hw'} onTest={(token) => setTestToken(token)} />
                 ) : current === 'lessons' ? (
                   <TeacherLessonsScreen onOpen={setJournal} />
                 ) : current === 'inbox' ? (
@@ -150,7 +155,7 @@ export default function App() {
                   <ProfileScreen profile={profile} role={role} pushState={pushState} onRole={changeRole} onLogout={doLogout} />
                 )}
               </View>
-              <TabBar tabs={tabs} tab={journal ? 'lessons' : current} unread={unread} onChange={(x) => { setJournal(null); setTab(x); }} t={i18n.t} />
+              <TabBar tabs={tabs} tab={journal ? 'lessons' : current} unread={unread} onChange={(x) => { setJournal(null); setTestToken(null); setTab(x); }} t={i18n.t} />
             </>
           )}
         </Shell>

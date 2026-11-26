@@ -1,8 +1,9 @@
 /** Экраны студента и родителя: главная (баланс, оплата, абонементы), расписание, успехи, домашние задания. */
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Linking, Platform, TextInput } from 'react-native';
-import { api } from '../api';
+import { Linking, Platform, Pressable, TextInput, View } from 'react-native';
+import { api, FileRef } from '../api';
+import { Attachments, FileView } from '../media';
 import { fmtDay, fmtMoney, fmtTime, useI18n } from '../i18n';
 import { Button, Card, Chip, ErrorBox, Loading, Row, Screen, T, Title, useColors } from '../ui';
 import { useLoad } from '../useLoad';
@@ -203,33 +204,57 @@ export function ProgressScreen() {
   );
 }
 
+
 interface MyHw {
   id: string;
   title: string;
   description: string | null;
+  links: { url: string; title?: string }[] | null;
   dueAt: string | null;
   group: { name: string };
-  test: { id: string; title: string } | null;
-  submission: { status: string; text: string | null; feedback?: string | null } | null;
+  test: { id: string; title: string; timeLimitMin: number | null } | null;
+  files: FileRef[];
+  submission: {
+    id: string;
+    status: 'submitted' | 'checked' | 'returned';
+    text: string | null;
+    grade: string | null;
+    feedback: string | null;
+    audioSeconds: number | null;
+    files: (FileRef & { isFeedback?: boolean })[];
+  } | null;
 }
 
-/** ДЗ студента: список, ответ текстом. Фото и аудио — в веб-кабинете (загрузка файлов — следующая итерация). */
-export function HomeworkScreen() {
+/**
+ * ДЗ студента: задание с файлами и ссылками, ответ текстом + фото тетради, файл, голос до 5 минут;
+ * оценка и комментарий преподавателя; ДЗ-тест проходится прямо в приложении.
+ */
+export function HomeworkScreen({ onTest }: { onTest: (token: string, title: string) => void }) {
   const { t, locale } = useI18n();
   const c = useColors();
   const q = useLoad<MyHw[]>('my-homework', () => api<MyHw[]>('/my/homework'));
+  const [filter, setFilter] = useState<'todo' | 'all'>('todo');
   const [openId, setOpenId] = useState<string | null>(null);
   const [text, setText] = useState('');
+  const [files, setFiles] = useState<FileRef[]>([]);
+  const [audioSeconds, setAudioSeconds] = useState<number | undefined>();
   const [err, setErr] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   if (q.loading && !q.data) return <Loading />;
+
+  const openAnswer = (h: MyHw) => {
+    setOpenId(h.id);
+    setText(h.submission?.text ?? '');
+    setFiles([]);
+    setAudioSeconds(undefined);
+    setErr(null);
+  };
   const submit = async (id: string) => {
     setBusy(true);
     setErr(null);
     try {
-      await api(`/my/homework/${id}/submit`, { method: 'POST', body: { text } });
+      await api(`/my/homework/${id}/submit`, { method: 'POST', body: { text: text.trim() || undefined, fileIds: files.map((f) => f.id), audioSeconds } });
       setOpenId(null);
-      setText('');
       q.reload();
     } catch (e) {
       setErr(e);
@@ -237,46 +262,101 @@ export function HomeworkScreen() {
       setBusy(false);
     }
   };
+  const startTest = async (h: MyHw) => {
+    setErr(null);
+    try {
+      const r = await api<{ token: string }>(`/my/homework/${h.id}/test`, { method: 'POST' });
+      onTest(r.token, h.test?.title ?? h.title);
+    } catch (e) {
+      setErr(e);
+    }
+  };
+  const rows = (q.data ?? []).filter((h) => filter === 'all' || !h.submission || h.submission.status === 'returned');
+
   return (
     <Screen refreshing={q.loading} onRefresh={q.reload}>
+      <Row>
+        <Button small kind={filter === 'todo' ? 'primary' : 'plain'} title={t('toDo')} onPress={() => setFilter('todo')} />
+        <Button small kind={filter === 'all' ? 'primary' : 'plain'} title={t('allTasks')} onPress={() => setFilter('all')} />
+      </Row>
       <ErrorBox error={q.error} onRetry={q.reload} />
-      {q.data?.length === 0 && <T muted>{t('noData')}</T>}
-      {q.data?.map((h) => {
-        const st = h.submission?.status;
+      {q.stale && <T color={c.warn}>{t('offline')}</T>}
+      {q.data && rows.length === 0 && <T muted>{t('noData')}</T>}
+      {rows.map((h) => {
+        const s = h.submission;
+        const st = s?.status;
+        const overdue = !s && h.dueAt && new Date(h.dueAt) < new Date();
+        const teacherFiles = s?.files.filter((f) => f.isFeedback) ?? [];
         return (
           <Card key={h.id}>
             <Row style={{ justifyContent: 'space-between' }}>
-              <T bold>{h.title}</T>
-              <Chip label={st === 'checked' ? t('checked') : st ? t('submitted') : t('toDo')} color={st === 'checked' ? c.ok : st ? c.primary : c.warn} />
+              <T bold style={{ flexShrink: 1 }}>
+                {h.title}
+              </T>
+              <Chip
+                label={st === 'checked' ? t('checked') : st === 'returned' ? t('returned') : st ? t('submitted') : overdue ? t('overdue') : t('toDo')}
+                color={st === 'checked' ? c.ok : st === 'returned' || overdue ? c.danger : st ? c.primary : c.warn}
+              />
             </Row>
             <T muted>
               {h.group.name}
               {h.dueAt ? ` · ${t('due')}: ${fmtDay(h.dueAt, locale)} ${fmtTime(h.dueAt)}` : ''}
             </T>
             {h.description ? <T>{h.description}</T> : null}
+            <FileView files={h.files} />
+            {h.links?.map((l) => (
+              <Pressable key={l.url} onPress={() => open(l.url)}>
+                <T color={c.primary}>🔗 {l.title || l.url}</T>
+              </Pressable>
+            ))}
+
+            {s && (st === 'checked' || st === 'returned') && (
+              <Card style={{ padding: 10, borderColor: st === 'checked' ? c.ok : c.danger }}>
+                {s.grade !== null && (
+                  <T bold>
+                    {t('grade')}: {Number(s.grade)}
+                  </T>
+                )}
+                {s.feedback ? <T>{s.feedback}</T> : null}
+                <FileView files={teacherFiles} />
+              </Card>
+            )}
+
             {h.test ? (
-              <T muted>{t('testInWeb')}</T>
-            ) : st !== 'checked' && openId !== h.id ? (
-              <Button small kind="plain" title={t('answer')} onPress={() => { setOpenId(h.id); setText(h.submission?.text ?? ''); }} />
-            ) : null}
-            {openId === h.id && (
               <>
+                <T muted>
+                  📝 {h.test.title}
+                  {h.test.timeLimitMin ? ` · ${h.test.timeLimitMin} ${t('min')}` : ''}
+                </T>
+                {!s && <Button small title={t('startTest')} onPress={() => startTest(h)} />}
+              </>
+            ) : st !== 'checked' && openId !== h.id ? (
+              <Button small kind="plain" title={st ? t('resubmit') : t('answer')} onPress={() => openAnswer(h)} />
+            ) : null}
+
+            {openId === h.id && (
+              <View style={{ gap: 8 }}>
                 <TextInput
                   value={text}
                   onChangeText={setText}
                   multiline
+                  placeholder={t('answerText')}
+                  placeholderTextColor={c.muted}
                   style={{ minHeight: 90, borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 8, color: c.text, textAlignVertical: 'top' }}
                 />
+                <Attachments files={files} onChange={setFiles} audioSeconds={audioSeconds} onAudio={setAudioSeconds} />
+                {st && <T muted size={12}>{t('resubmitHint')}</T>}
                 <ErrorBox error={err} />
                 <Row>
                   <Button small kind="plain" title={t('back')} onPress={() => setOpenId(null)} />
-                  <Button small title={t('send')} disabled={busy || !text.trim()} onPress={() => submit(h.id)} />
+                  <Button small title={t('send')} disabled={busy || (!text.trim() && !files.length)} onPress={() => submit(h.id)} />
                 </Row>
-              </>
+              </View>
             )}
           </Card>
         );
       })}
+      {!openId && <ErrorBox error={err} />}
     </Screen>
   );
 }
