@@ -116,6 +116,30 @@ const ru = {
   earlier: 'Ранее',
   noMessages: 'Сообщений пока нет',
   chatGone: 'Вы больше не участник этого чата (например, перевод в другую группу).',
+  'j.attendance': 'Посещаемость',
+  'j.grades': 'Оценки',
+  'j.lesson': 'Перенос',
+  planTopic: 'Тема по учебному плану',
+  suggested: 'Следующая по плану',
+  topicNote: 'Тема или заметка (необязательно)',
+  scale16: 'Шкала 1–6 (1 — лучшая)',
+  scalePoints: 'Баллы',
+  scalePercent: 'Проценты 0–100',
+  badNumber: 'Оценка — число',
+  saveGrades: 'Сохранить оценки',
+  moveLesson: 'Перенести',
+  cancelLesson: 'Отменить занятие',
+  sendRequest: 'Отправить запрос администратору',
+  requestHint: 'Изменить расписание может администратор: он получит запрос задачей в CRM и push.',
+  requestSent: 'Запрос отправлен администратору филиала',
+  lessonMoved: 'Занятие перенесено, студенты получат уведомление',
+  lessonCancelled: 'Занятие отменено, студенты получат уведомление',
+  lessonPast: 'Занятие уже прошло',
+  needReason: 'Укажите причину',
+  badDateTime: 'Дата ДД.ММ.ГГГГ и время ЧЧ:ММ',
+  reason: 'Причина',
+  date: 'Дата',
+  time: 'Время',
 };
 export type TKey = keyof typeof ru;
 type Dict = Partial<Record<TKey, string>>;
@@ -240,6 +264,25 @@ export const fmtTime = (iso: string) => {
   const z = zoned(new Date(iso));
   return `${pad(z.h)}:${pad(z.min)}`;
 };
+
+/** Дата и время по часам центра (ДД.ММ.ГГГГ, ЧЧ:ММ) → момент времени (UTC). null — неверный ввод. */
+export function centerToUtc(date: string, time: string): Date | null {
+  const d = date.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  const t = time.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!d || !t) return null;
+  const [dd, mm, yy, hh, mi] = [+d[1], +d[2], +d[3], +t[1], +t[2]];
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || hh > 23 || mi > 59) return null;
+  const guess = Date.UTC(yy, mm - 1, dd, hh, mi);
+  const z = zoned(new Date(guess));
+  const shown = Date.UTC(z.y, z.m, z.d, z.h, z.min);
+  return new Date(guess - (shown - guess));
+}
+
+/** Дата по часам центра в виде ДД.ММ.ГГГГ (для полей ввода). */
+export function centerDateInput(iso: string) {
+  const z = zoned(new Date(iso));
+  return `${pad(z.d)}.${pad(z.m + 1)}.${z.y}`;
+}
 
 /** Начало «сегодня» по времени центра (для списка занятий преподавателя). */
 export function centerDayStart(now = new Date()) {

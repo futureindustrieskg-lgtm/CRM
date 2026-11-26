@@ -173,7 +173,7 @@ export default function App() {
                 {testToken ? (
                   <TestRunScreen token={testToken} onBack={() => setTestToken(null)} />
                 ) : journal ? (
-                  <JournalScreen lessonId={journal} onBack={() => setJournal(null)} />
+                  <JournalScreen lessonId={journal} canManage={role.permissions.includes('schedule.update') || role.permissions.includes('*')} onBack={() => setJournal(null)} />
                 ) : chat ? (
                   <ChatScreen key={chat.id} id={chat.id} title={chat.title} meId={profile.id} onBack={() => setChat(null)} />
                 ) : current === 'home' ? (

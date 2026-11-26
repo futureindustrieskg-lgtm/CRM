@@ -13,9 +13,10 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
-import { IsDateString, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { AuditService } from '../audit/audit';
 import { branchScope, Ctx, RequestContext, RequirePermissions } from '../common/context';
+import { pushToUser } from '../notifications/expo';
 import { NotificationsService, when } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictService } from './conflicts';
@@ -50,6 +51,12 @@ class LessonUpdateDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+class ChangeRequestDto {
+  @ApiProperty({ enum: ['move', 'cancel'] }) @IsIn(['move', 'cancel']) kind: 'move' | 'cancel';
+  @ApiProperty() @IsString() @MaxLength(300) reason: string;
+  @ApiPropertyOptional({ description: 'Предлагаемое время (текстом), для переноса' }) @IsOptional() @IsString() @MaxLength(100) proposed?: string;
 }
 
 class CancelDto {
@@ -211,6 +218,45 @@ export class LessonsController {
     const after = await this.prisma.lesson.update({ where: { id }, data: { status: 'planned' } });
     await this.audit.log({ userId: ctx.userId, entity: 'lesson', entityId: id, action: 'restore', before: { status: before.status }, after: { status: after.status } });
     return after;
+  }
+
+  /**
+   * Запрос преподавателя на перенос или отмену своего занятия (из приложения): у преподавателя нет права
+   * менять расписание, поэтому администраторам филиала создаётся задача в CRM и отправляется push.
+   */
+  @Post(':id/change-request')
+  @RequirePermissions('attendance.read')
+  async changeRequest(@Ctx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ChangeRequestDto) {
+    if (!dto.reason?.trim()) throw new BadRequestException('Укажите причину');
+    const l = await this.findOwn(ctx, id);
+    if (l.status === 'cancelled') throw new BadRequestException('Занятие уже отменено');
+    if (l.endsAt < new Date()) throw new BadRequestException('Занятие уже прошло');
+    const [teacher, group] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { firstName: true, lastName: true } }),
+      this.prisma.group.findUniqueOrThrow({ where: { id: l.groupId }, select: { name: true, branchId: true } }),
+    ]);
+    // Администраторы филиала группы; если их нет — директор (роль на все филиалы).
+    let admins = await this.prisma.userRole.findMany({
+      where: { role: { code: 'branch_admin' }, branchId: group.branchId, user: { isActive: true } },
+      select: { userId: true },
+    });
+    if (!admins.length) admins = await this.prisma.userRole.findMany({ where: { role: { code: 'owner' }, user: { isActive: true } }, select: { userId: true } });
+    const ids = [...new Set(admins.map((a) => a.userId))].filter((u) => u !== ctx.userId);
+    if (!ids.length) throw new BadRequestException('В филиале нет администратора для запроса');
+    const w = when(l.startsAt);
+    const what = dto.kind === 'cancel' ? 'отменить' : 'перенести';
+    const title =
+      `Запрос преподавателя ${teacher.firstName} ${teacher.lastName}: ${what} занятие «${group.name}» ${w.date} ${w.time}` +
+      (dto.kind === 'move' && dto.proposed?.trim() ? ` → ${dto.proposed.trim()}` : '') +
+      `. Причина: ${dto.reason.trim()}`;
+    // Срок задачи — за 2 часа до занятия (но не раньше чем через 15 минут).
+    const dueAt = new Date(Math.max(Date.now() + 15 * 60_000, +l.startsAt - 2 * 3600_000));
+    await this.prisma.task.createMany({ data: ids.map((assigneeId) => ({ assigneeId, title: title.slice(0, 500), dueAt })) });
+    await this.audit.log({ userId: ctx.userId, entity: 'lesson', entityId: id, action: `${dto.kind}_request`, after: { proposed: dto.proposed }, reason: dto.reason });
+    for (const userId of ids) {
+      await pushToUser(this.prisma, userId, { title: `Запрос: ${what} занятие`, body: title.slice(0, 200), data: { type: 'lesson_request', lessonId: id } });
+    }
+    return { sent: ids.length };
   }
 
   /** Проверка конфликтов перед сохранением отдельного занятия; при конфликте — 409. */

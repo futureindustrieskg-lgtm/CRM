@@ -19,6 +19,8 @@ export interface QueuedMark {
   label: string;
   items: MarkItem[];
   topic?: string;
+  /** Тема из учебного плана курса. */
+  courseTopicId?: string;
   clientTime: string;
 }
 export interface SyncFailure {
@@ -72,7 +74,7 @@ export async function submitMarks(mark: Omit<QueuedMark, 'id' | 'clientTime'>): 
 }
 
 const send = (q: QueuedMark) =>
-  api(`/lessons/${q.lessonId}/attendance`, { method: 'PUT', body: { items: q.items, clientTime: q.clientTime, ...(q.topic ? { topic: q.topic } : {}) } });
+  api(`/lessons/${q.lessonId}/attendance`, { method: 'PUT', body: { items: q.items, clientTime: q.clientTime, ...(q.topic ? { topic: q.topic } : {}), ...(q.courseTopicId ? { courseTopicId: q.courseTopicId } : {}) } });
 
 /** Отправка очереди по порядку. Ошибка сервера (занятие отменено и т. п.) снимает отметку с очереди и показывается. */
 export function sync(): Promise<void> {
